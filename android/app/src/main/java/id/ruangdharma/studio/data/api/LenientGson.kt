@@ -6,13 +6,16 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.TypeAdapter
+import com.google.gson.TypeAdapterFactory
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import id.ruangdharma.studio.data.model.NaskahPart
 import java.io.StringReader
+import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.lang.reflect.WildcardType
 
 /*
  * Gson "toleran": data dari server/Muse kadang tidak konsisten tipenya
@@ -25,22 +28,44 @@ import java.lang.reflect.Type
 object LenientGson {
     val gson: Gson by lazy { builder().create() }
 
-    fun builder(): GsonBuilder {
-        val naskahListType: Type = object : TypeToken<List<NaskahPart>>() {}.type
-        return GsonBuilder()
-            .registerTypeAdapter(Int::class.javaPrimitiveType, IntAdapter)
-            .registerTypeAdapter(Int::class.javaObjectType, IntAdapter)
-            .registerTypeAdapter(Long::class.javaPrimitiveType, LongAdapter)
-            .registerTypeAdapter(Long::class.javaObjectType, LongAdapter)
-            .registerTypeAdapter(Double::class.javaPrimitiveType, DoubleAdapter)
-            .registerTypeAdapter(Double::class.javaObjectType, DoubleAdapter)
-            .registerTypeAdapter(Float::class.javaPrimitiveType, FloatAdapter)
-            .registerTypeAdapter(Float::class.javaObjectType, FloatAdapter)
-            .registerTypeAdapter(Boolean::class.javaPrimitiveType, BoolAdapter)
-            .registerTypeAdapter(Boolean::class.javaObjectType, BoolAdapter)
-            .registerTypeAdapter(String::class.java, StringAdapter)
-            .registerTypeAdapter(NaskahPart::class.java, NaskahPartAdapter)
-            .registerTypeAdapter(naskahListType, NaskahListAdapter)
+    fun builder(): GsonBuilder = GsonBuilder()
+        .registerTypeAdapter(Int::class.javaPrimitiveType, IntAdapter)
+        .registerTypeAdapter(Int::class.javaObjectType, IntAdapter)
+        .registerTypeAdapter(Long::class.javaPrimitiveType, LongAdapter)
+        .registerTypeAdapter(Long::class.javaObjectType, LongAdapter)
+        .registerTypeAdapter(Double::class.javaPrimitiveType, DoubleAdapter)
+        .registerTypeAdapter(Double::class.javaObjectType, DoubleAdapter)
+        .registerTypeAdapter(Float::class.javaPrimitiveType, FloatAdapter)
+        .registerTypeAdapter(Float::class.javaObjectType, FloatAdapter)
+        .registerTypeAdapter(Boolean::class.javaPrimitiveType, BoolAdapter)
+        .registerTypeAdapter(Boolean::class.javaObjectType, BoolAdapter)
+        .registerTypeAdapter(String::class.java, StringAdapter)
+        .registerTypeAdapter(NaskahPart::class.java, NaskahPartAdapter)
+        .registerTypeAdapterFactory(NaskahListFactory)
+
+    private object NaskahListFactory : TypeAdapterFactory {
+        override fun <T : Any?> create(gson: Gson, typeToken: TypeToken<T>): TypeAdapter<T>? {
+            val rawType = typeToken.rawType
+            if (List::class.java.isAssignableFrom(rawType)) {
+                val type = typeToken.type
+                if (type is ParameterizedType) {
+                    val args = type.actualTypeArguments
+                    if (args.isNotEmpty()) {
+                        val arg = args[0]
+                        val targetClass: Class<*>? = when (arg) {
+                            is Class<*> -> arg
+                            is WildcardType -> (arg.upperBounds.firstOrNull() as? Class<*>) ?: (arg.lowerBounds.firstOrNull() as? Class<*>)
+                            else -> null
+                        }
+                        if (targetClass != null && NaskahPart::class.java.isAssignableFrom(targetClass)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return NaskahListAdapter as TypeAdapter<T>
+                        }
+                    }
+                }
+            }
+            return null
+        }
     }
 
     /** Baca token berikutnya sebagai angka Double, atau null bila tidak bisa. */
@@ -123,7 +148,7 @@ object LenientGson {
             if (tok == JsonToken.NULL) { r.nextNull(); return null }
             if (tok == JsonToken.STRING) {
                 val s = r.nextString().trim()
-                return if (s.isBlank()) null else NaskahPart(teks = s, narasi = s, dialog = s)
+                return if (s.isBlank()) null else NaskahPart(bagian = 0, teks = s, narasi = s, dialog = s)
             }
             if (tok != JsonToken.BEGIN_OBJECT) {
                 r.skipValue()
