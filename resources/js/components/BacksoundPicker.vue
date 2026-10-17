@@ -94,7 +94,7 @@ async function upload(e) {
   selectedFileName.value = f.name;
   selectedFileSize.value = fileSizeLabel(f.size);
   const probed = await probeDuration(f);
-  if (probed) duration.value = Math.max(1, Math.round(probed));
+  if (probed) duration.value = Math.max(0.5, Math.round(probed * 10) / 10);
   const fd = new FormData(); fd.append('name', name.value); fd.append('file', f);
   uploading.value = true;
   try {
@@ -111,7 +111,7 @@ async function pick(bs) {
     duration.value = bs.duration_sec;
   } else {
     const probed = await probeUrlDuration(bs.file_url);
-    duration.value = probed ? Math.max(1, Math.round(probed)) : 60;
+    duration.value = probed ? Math.max(0.5, Math.round(probed * 10) / 10) : 60;
   }
   clampTrim(); sync(); toast.success(`Backsound "${bs.name}" dipilih.`);
 }
@@ -120,7 +120,7 @@ onMounted(async () => {
   // Audio sudah terpilih sebelumnya (mis. edit): probe durasi dari file_url.
   if (local.value.url) {
     const probed = await probeUrlDuration(local.value.url);
-    if (probed) { duration.value = Math.max(1, Math.round(probed)); clampTrim(); sync(); }
+    if (probed) { duration.value = Math.max(0.5, Math.round(probed * 10) / 10); clampTrim(); sync(); }
   }
 });
 </script>

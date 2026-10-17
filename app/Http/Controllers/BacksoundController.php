@@ -25,7 +25,7 @@ class BacksoundController extends Controller
         try {
             $full = storage_path('app/public/' . $path);
             $out = shell_exec('ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ' . escapeshellarg($full) . ' 2>/dev/null');
-            if ($out) $duration = (int) round((float) trim($out));
+            if ($out) $duration = round((float) trim($out), 1); // 1 desimal, JANGAN (int) — durasi dipakai sebagai batas atas trim
         } catch (\Throwable $e) {}
         $bs = Backsound::create(['user_id' => $request->user()->id, 'name' => $data['name'], 'file_url' => '/storage/' . $path, 'duration_sec' => $duration]);
         return response()->json(['success' => true, 'message' => 'Backsound diunggah.', 'data' => $bs], 201);

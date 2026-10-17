@@ -24,6 +24,7 @@ class VideoGeneration extends Model
         'naskah' => 'array', 'prompts' => 'array', 'durasi' => 'integer',
         'is_favorite' => 'boolean', 'is_archived' => 'boolean', 'video_files' => 'array',
         'reviewed_at' => 'datetime', 'publish_at' => 'datetime',
+        'backsound_trim_start' => 'float', 'backsound_trim_end' => 'float',
     ];
 
     public function user(): BelongsTo { return $this->belongsTo(User::class); }

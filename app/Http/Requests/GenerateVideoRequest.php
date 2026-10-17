@@ -18,8 +18,8 @@ class GenerateVideoRequest extends FormRequest
             'muse_profile_id' => 'sometimes|nullable|integer',
             'backsound_url' => 'sometimes|nullable|string|max:2048',
             'backsound_volume' => 'sometimes|integer|min:0|max:100',
-            'backsound_trim_start' => 'sometimes|integer|min:0',
-            'backsound_trim_end' => 'sometimes|nullable|integer|min:0',
+            'backsound_trim_start' => 'sometimes|numeric|min:0',
+            'backsound_trim_end' => 'sometimes|nullable|numeric|min:0',
         ];
     }
     public function messages(): array
