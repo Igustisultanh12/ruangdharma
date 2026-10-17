@@ -124,7 +124,7 @@ function stopPreview() {
   isPlaying.value = false;
   if (previewAudio) {
     try { previewAudio.pause(); } catch { /* abaikan */ }
-    previewAudio.currentTime = effStart.value;
+    try { previewAudio.currentTime = effStart.value; } catch { /* abaikan: metadata belum termuat */ }
   }
   playPos.value = effStart.value;
 }
