@@ -36,6 +36,23 @@ class VideoGeneration extends Model
     /** Nama profil Muse yang mengerjakan video ini (via MuseJob). Tidak di-$appends agar tidak N+1 — controller yang membutuhkannya memanggil ->append('muse_profile_name') setelah eager-load museJob.museProfile. */
     public function getMuseProfileNameAttribute(): ?string { return $this->museJob?->museProfile?->name; }
 
+    /** Pastikan naskah selalu berupa array numerik terurut (bukan objek asosiatif PHP {"0": ...}) agar Gson Android & klien JSON tidak error. */
+    public function getNaskahAttribute($value)
+    {
+        if (empty($value)) return [];
+        $decoded = is_string($value) ? json_decode($value, true) : $value;
+        if (!is_array($decoded)) {
+            return is_string($decoded) && trim($decoded) !== '' ? [['bagian' => 1, 'teks' => $decoded, 'dialog' => $decoded, 'narasi' => $decoded]] : [];
+        }
+        $items = array_values($decoded);
+        return array_map(function ($item, $idx) {
+            if (!is_array($item)) {
+                return ['bagian' => $idx + 1, 'teks' => (string) $item, 'dialog' => (string) $item, 'narasi' => (string) $item];
+            }
+            return $item;
+        }, $items, array_keys($items));
+    }
+
     public function scopeToday(Builder $q): Builder { return $q->whereDate('created_at', now()->toDateString()); }
     public function scopeByModel(Builder $q, string $model): Builder { return $q->where('model', $model); }
     public function scopeFavorites(Builder $q): Builder { return $q->where('is_favorite', true); }

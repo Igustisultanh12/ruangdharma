@@ -77,4 +77,43 @@ class ModelsTest {
         assertEquals("cek lagi", g.reviewNote)
         assertEquals(3, g.naskah?.first()?.estimasiDetik)
     }
+
+    /** Kasus Riwayat gagal dimuat: naskah dikirim sebagai objek asosiatif PHP {"0": ...}, string kosong "", array string, atau teks utuh. */
+    @Test fun generationList_toleratesNaskahAssociativeObject() {
+        val json = """{"success":true,"data":{"current_page":1,"total":1,"data":[{"id":1,"keyword":"Tri Sandhya","durasi":60,"naskah":{"0":{"bagian":1,"teks":"Om Swastyastu"},"1":{"bagian":2,"teks":"Pagi hari"}}}]}}"""
+        val type = object : com.google.gson.reflect.TypeToken<ApiWrapper<Paginator<Generation>>>() {}.type
+        val r: ApiWrapper<Paginator<Generation>> = gson.fromJson(json, type)
+        val g = r.data!!.items.first()
+        assertEquals(2, g.naskah?.size)
+        assertEquals("Om Swastyastu", g.naskah?.first()?.text())
+    }
+
+    @Test fun generationList_toleratesNaskahEmptyStringAndNull() {
+        val json = """{"success":true,"data":{"current_page":1,"total":2,"data":[{"id":1,"keyword":"A","durasi":60,"naskah":""},{"id":2,"keyword":"B","durasi":60,"naskah":null}]}}"""
+        val type = object : com.google.gson.reflect.TypeToken<ApiWrapper<Paginator<Generation>>>() {}.type
+        val r: ApiWrapper<Paginator<Generation>> = gson.fromJson(json, type)
+        assertEquals(2, r.data!!.items.size)
+        assertEquals(0, r.data!!.items[0].naskah?.size)
+        assertNull(r.data!!.items[1].naskah)
+    }
+
+    @Test fun generationList_toleratesNaskahArrayOfStrings() {
+        val json = """{"success":true,"data":{"current_page":1,"total":1,"data":[{"id":1,"keyword":"Karma","durasi":60,"naskah":["Bagian 1 cerita...","Bagian 2 cerita..."]}]}}"""
+        val type = object : com.google.gson.reflect.TypeToken<ApiWrapper<Paginator<Generation>>>() {}.type
+        val r: ApiWrapper<Paginator<Generation>> = gson.fromJson(json, type)
+        val g = r.data!!.items.first()
+        assertEquals(2, g.naskah?.size)
+        assertEquals("Bagian 1 cerita...", g.naskah?.first()?.text())
+        assertEquals(1, g.naskah?.first()?.bagian)
+        assertEquals(2, g.naskah?.get(1)?.bagian)
+    }
+
+    @Test fun generationList_toleratesNaskahPlainText() {
+        val json = """{"success":true,"data":{"current_page":1,"total":1,"data":[{"id":1,"keyword":"Karma","durasi":60,"naskah":"Naskah utuh dari generator"}]}}"""
+        val type = object : com.google.gson.reflect.TypeToken<ApiWrapper<Paginator<Generation>>>() {}.type
+        val r: ApiWrapper<Paginator<Generation>> = gson.fromJson(json, type)
+        val g = r.data!!.items.first()
+        assertEquals(1, g.naskah?.size)
+        assertEquals("Naskah utuh dari generator", g.naskah?.first()?.text())
+    }
 }

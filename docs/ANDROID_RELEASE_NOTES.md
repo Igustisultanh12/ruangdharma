@@ -1,3 +1,11 @@
+# RUANGDHARMA Android v1.2.1 (versionCode 5)
+
+## Perbaikan
+- **Riwayat gagal dimuat ("Format data dari server tidak dikenali")**: ditangani tuntas bila naskah dari server/Muse berformat objek asosiatif PHP (`{"0": ...}`), string kosong (`""`), array teks, atau teks panjang. Deserialisasi naskah kini dibuat sangat toleran sehingga daftar video selalu berhasil dimuat.
+- **Normalisasi backend**: accessor `naskah` di backend memastikan array JSON selalu terurut dan bersih (`array_values`).
+
+---
+
 # RUANGDHARMA Android v1.2.0 (versionCode 4)
 
 ## Baru: notifikasi HP seperti SISINDEN 🔔
