@@ -1,6 +1,8 @@
 <resources>
 <color name="brand_violet">#7C3AED</color>
-<color name="brand_fuchsia">#D946EF</color>
+<color name="brand_fuchsia">#C026D3</color>
 <color name="brand_orange">#F97316</color>
 <color name="brand_yellow">#FDE047</color>
+<color name="rd_surface">#FBF8FF</color>
+<color name="ic_launcher_background">#FDE047</color>
 </resources>

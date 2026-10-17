@@ -7,52 +7,69 @@ import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
+/* Bentuk respons disamakan dengan controller Laravel (lihat app/Http/Controllers). */
 interface ApiService {
-    // Login: server mengirim {success, message, token, user} di level ATAS,
-    // BUKAN ApiWrapper<LoginResponse> (tidak ada field "data" wajib).
+    // {success, message, token, user, data:{token,user}}
     @POST("login")
     suspend fun login(@Body body: Map<String, String>): Response<LoginResponse>
 
     @POST("logout")
-    suspend fun logout(): Response<ApiWrapper<JsonObject>>
+    suspend fun logout(): Response<JsonObject>
 
+    // {success, user}
     @GET("me")
-    suspend fun me(): Response<ApiWrapper<User>>
+    suspend fun me(): Response<MeResponse>
+
+    @GET("realtime/pulse")
+    suspend fun pulse(): Response<Pulse>
 
     @GET("generations")
-    suspend fun generations(@Query("page") page: Int = 1): Response<ApiWrapper<Paginator<Generation>>>
+    suspend fun generations(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 30,
+        @Query("favorites") favorites: String? = null,
+        @Query("archived") archived: String? = "false",
+        @Query("search") search: String? = null,
+    ): Response<ApiWrapper<Paginator<Generation>>>
+
+    @GET("generations/counts")
+    suspend fun counts(): Response<ApiWrapper<Counts>>
 
     @GET("generations/{id}")
     suspend fun generation(@Path("id") id: Int): Response<ApiWrapper<Generation>>
 
+    // {success, message, generation, ...}
     @POST("generations")
-    suspend fun createGeneration(@Body body: Map<String, Any?>): Response<ApiWrapper<JsonObject>>
+    suspend fun createGeneration(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<JsonObject>
+
+    @POST("generations/{id}/toggle-favorite")
+    suspend fun toggleFavorite(@Path("id") id: Int): Response<ApiWrapper<Generation>>
 
     @PUT("generations/{id}/backsound")
-    suspend fun updateBacksound(@Path("id") id: Int, @Body body: Map<String, Any?>): Response<ApiWrapper<Generation>>
+    suspend fun updateBacksound(@Path("id") id: Int, @Body body: Map<String, @JvmSuppressWildcards Any?>): Response<JsonObject>
 
     @GET("social/stats")
-    suspend fun socialStats(): Response<ApiWrapper<List<SocialStats>>>
+    suspend fun socialStats(@Query("platform") platform: String): Response<StatsResponse>
 
     @GET("social/publishes")
-    suspend fun socialPublishes(): Response<ApiWrapper<List<SocialPublish>>>
+    suspend fun socialPublishes(): Response<ApiWrapper<Paginator<SocialPublish>>>
 
     @POST("social/publish")
-    suspend fun socialPublish(@Body body: Map<String, Any?>): Response<ApiWrapper<JsonObject>>
+    suspend fun socialPublish(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<JsonObject>
 
     @POST("social/refresh")
-    suspend fun socialRefresh(): Response<ApiWrapper<JsonObject>>
+    suspend fun socialRefresh(): Response<JsonObject>
 
     @GET("admin/muse-config/token-usage")
     suspend fun tokenUsage(): Response<ApiWrapper<TokenUsage>>
 
     @GET("backsounds")
-    suspend fun backsounds(): Response<ApiWrapper<List<Backsound>>>
+    suspend fun backsounds(): Response<ApiWrapper<Paginator<Backsound>>>
 
     @Multipart
     @POST("backsounds")
     suspend fun uploadBacksound(
         @Part("name") name: RequestBody,
         @Part file: MultipartBody.Part
-    ): Response<ApiWrapper<Backsound>>
+    ): Response<JsonObject>
 }
