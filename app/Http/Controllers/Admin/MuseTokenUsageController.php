@@ -37,6 +37,12 @@ class MuseTokenUsageController extends Controller
             $d = now()->subDays($i)->format('Y-m-d');
             $dailyList[] = ['date' => $d, 'tokens' => (int) ceil(($daily[$d] ?? 0) / 4), 'chars' => $daily[$d] ?? 0];
         }
+        // Riwayat per generasi (20 terbaru): berapa token dipakai per video/job
+        $history = VideoGeneration::select('id','keyword','model','durasi','naskah','caption','prompts','muse_job_id','created_at')->orderByDesc('created_at')->limit(20)->get()->map(function ($g) {
+            $chars = mb_strlen(json_encode($g->naskah ?? '') . ' ' . json_encode($g->caption ?? '') . ' ' . json_encode($g->prompts ?? ''));
+            return ['id' => $g->id, 'keyword' => $g->keyword, 'model' => $g->model, 'durasi' => $g->durasi, 'muse_job_id' => $g->muse_job_id, 'chars' => $chars, 'tokens' => (int) ceil($chars / 4), 'created_at' => $g->created_at?->toIso8601String()];
+        });
+        $jobHistory = MuseJob::select('id','keyword','model','durasi','status','created_at')->orderByDesc('created_at')->limit(20)->get();
         return response()->json(['success' => true, 'data' => [
             'total_tokens' => $totalTokens,
             'total_chars' => $totalChars,
@@ -47,6 +53,8 @@ class MuseTokenUsageController extends Controller
             'remaining' => $remaining,
             'percent_used' => $pct,
             'daily' => $dailyList,
+            'history' => $history,
+            'job_history' => $jobHistory,
             'note' => 'Estimasi: 1 token ~ 4 karakter. Ini pemakaian untuk naskah/caption yang dihasilkan web, bukan billing resmi Muse. Ubah limit di Pengaturan > muse_monthly_token_limit.',
         ]]);
     }

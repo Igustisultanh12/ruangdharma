@@ -102,6 +102,24 @@ const curls = computed(() => [
           <div class="rounded-2xl border-2 border-line p-4"><p class="text-sm text-muted">Sisa token (bulan ini)</p><p class="font-display text-2xl font-bold tabular-nums text-emerald-600">{{ tokenUsage.remaining?.toLocaleString('id-ID') }}</p><p class="text-xs text-muted">Reset tiap awal bulan</p></div>
           <div class="rounded-2xl border-2 border-line p-4"><p class="text-sm text-muted">Total generasi / job</p><p class="font-display text-2xl font-bold tabular-nums">{{ tokenUsage.total_generations }} video • {{ tokenUsage.total_jobs }} job</p><p class="text-xs text-muted">Total token sepanjang waktu: {{ tokenUsage.total_tokens?.toLocaleString('id-ID') }}</p></div>
         </div>
+        <div v-if="tokenUsage?.history?.length" class="mt-6">
+          <p class="text-sm font-bold">Riwayat penggunaan token (20 video terbaru)</p>
+          <p class="text-xs text-muted">Berapa token dipakai per video / job — estimasi 1 token ~ 4 karakter.</p>
+          <div class="mt-2 overflow-x-auto">
+            <table class="table">
+              <thead><tr><th>Tanggal</th><th>Video / Job</th><th>Model</th><th>Karakter</th><th class="text-right">Token</th></tr></thead>
+              <tbody>
+                <tr v-for="h in tokenUsage.history" :key="h.id">
+                  <td class="whitespace-nowrap text-xs text-muted">{{ new Date(h.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</td>
+                  <td class="font-semibold">{{ h.keyword }} <span class="text-xs text-muted">#{{ h.muse_job_id || h.id }}</span></td>
+                  <td><span class="text-xs">{{ h.model }} • {{ h.durasi }} dtk</span></td>
+                  <td class="tabular-nums">{{ h.chars?.toLocaleString('id-ID') }}</td>
+                  <td class="text-right font-bold tabular-nums">{{ h.tokens?.toLocaleString('id-ID') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         <div v-if="tokenUsage?.daily?.length" class="mt-4">
           <p class="text-sm font-bold">7 hari terakhir</p>
           <div class="mt-2 flex gap-2 overflow-x-auto">
