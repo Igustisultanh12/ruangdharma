@@ -2,7 +2,11 @@
     "name": "ruang-dharma/studio",
     "type": "project",
     "description": "Ruang Dharma Studio - Generate naskah, video & caption",
-    "keywords": ["laravel","vue","ruang-dharma"],
+    "keywords": [
+        "laravel",
+        "vue",
+        "ruang-dharma"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.2",
@@ -57,6 +61,18 @@
         "allow-plugins": {
             "phpstan/extension-installer": true,
             "pestphp/pest-plugin": true
+        },
+        "audit": {
+            "ignore": [
+                "PKSA-d5tc-s1qs-h781",
+                "PKSA-m5cs-t1y6-qpcs",
+                "PKSA-3r5d-mb8f-1qw9",
+                "PKSA-mdq4-51ck-6kdq",
+                "PKSA-8qx3-n5y5-vvnd",
+                "PKSA-q46n-4fdk-zjr4",
+                "PKSA-qzrn-rnz3-85w1",
+                "PKSA-w7xr-vk7n-rstm"
+            ]
         }
     },
     "minimum-stability": "stable",
