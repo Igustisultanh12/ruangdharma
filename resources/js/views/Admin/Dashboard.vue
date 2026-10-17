@@ -4,6 +4,6 @@
 <div class="card"><h2 class="font-bold mb-2">Per Model (Hari Ini)</h2><pre>{{ s.by_model }}</pre><h2 class="font-bold mt-3 mb-2">7 Hari Terakhir</h2><pre>{{ s.last_7_days }}</pre></div>
 </div></template>
 <script setup>
-import { ref, onMounted } from 'vue'; import api from '../services/api.js';
+import { ref, onMounted } from 'vue'; import api from '../../services/api.js';
 const s=ref({}); onMounted(async()=>{ const {data}=await api.get('/admin/stats'); s.value=data; });
 </script>
