@@ -49,7 +49,18 @@ jobs:
           cp .env.example .env
           php artisan key:generate
       - name: Run tests
-        run: php artisan test
+        run: |
+          set +e
+          php artisan test --compact 2>&1 | tee "$RUNNER_TEMP/phpunit.log"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            # Ringkasan kegagalan sebagai anotasi (terbaca tanpa membuka log).
+            grep -nE "FAILED|Failed asserting|Expected|Error|Exception|at tests/|Tests:" "$RUNNER_TEMP/phpunit.log" | head -40 > "$RUNNER_TEMP/fail.txt"
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$RUNNER_TEMP/fail.txt" | cut -c1-6000)
+            echo "::error title=PHPUnit gagal::${msg}"
+            tail -60 "$RUNNER_TEMP/phpunit.log" | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | cut -c1-6000 | sed 's/^/::error title=PHPUnit tail::/'
+          fi
+          exit $status
 
   android:
     name: Android build & unit tests
