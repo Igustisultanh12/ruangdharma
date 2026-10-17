@@ -15,7 +15,14 @@ return new class extends Migration {
             $table->json('prompts')->nullable();
             $table->string('status')->default('completed');
             $table->string('source')->default('local'); // local | muse
-            $table->foreignId('muse_job_id')->nullable()->constrained('muse_jobs')->nullOnDelete();
+            // NOTE: FK ke muse_jobs TIDAK dibuat di sini. Migration ini jalan
+            // SEBELUM 000003_create_muse_jobs_table, jadi tabel muse_jobs
+            // belum ada dan MySQL gagal dengan error 1215
+            // "Cannot add foreign key constraint". Kolom hanya dibuat
+            // sebagai unsignedBigInteger + index; FK ditambahkan di
+            // migration 000005_add_muse_job_fk_to_video_generations
+            // setelah kedua tabel ada.
+            $table->unsignedBigInteger('muse_job_id')->nullable()->index();
             $table->timestamps();
             $table->index(['user_id','created_at']);
         });
