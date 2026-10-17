@@ -83,6 +83,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/social/publishes', [\App\Http\Controllers\SocialController::class, 'publishes']);
     Route::post('/social/publish', [\App\Http\Controllers\SocialController::class, 'publish']);
     Route::post('/social/refresh', [\App\Http\Controllers\SocialController::class, 'refresh']);
+    // Backsound - upload & pilih backsound untuk video
+    Route::get('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'index']);
+    Route::post('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'store']);
+    Route::delete('/backsounds/{backsound}', [\App\Http\Controllers\BacksoundController::class, 'destroy']);
 
     // Komentar
     Route::get('/generations/{generationId}/comments', [CommentController::class, 'index']);
