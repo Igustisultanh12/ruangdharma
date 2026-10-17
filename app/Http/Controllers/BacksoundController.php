@@ -12,7 +12,13 @@ class BacksoundController extends Controller
     }
     public function store(Request $request)
     {
-        $data = $request->validate(['name' => 'required|string|max:100', 'file' => 'required|file|mimes:mp3,wav,m4a,ogg|max:20480']);
+        // Validasi berbasis EKSTENSI (bukan deteksi MIME fileinfo saja): file MP3 dari
+        // CapCut/WA/HP sering terdeteksi MIME lain sehingga gagal walau .mp3.
+        // 'extensions' (Laravel 11) memeriksa ekstensi file. Maks 20MB.
+        $data = $request->validate(
+            ['name' => 'required|string|max:100', 'file' => 'required|file|extensions:mp3,wav,m4a,ogg|max:20480'],
+            ['file.extensions' => 'Format audio harus MP3, WAV, M4A, atau OGG.', 'file.max' => 'Ukuran file maksimal 20MB.']
+        );
         $path = $request->file('file')->store('backsounds', 'public');
         // Durasi dihitung via ffprobe di server jika tersedia, fallback null
         $duration = null;
