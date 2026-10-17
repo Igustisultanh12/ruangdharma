@@ -266,4 +266,22 @@ class AppFlowTest extends TestCase
         $this->assertTrue(Notification::where('user_id', $this->user()->id)->where('title', 'Video via Muse selesai')->exists());
         $this->assertSame(1, VideoGeneration::where('muse_job_id', $jobId)->count());
     }
+
+    public function test_muse_upload_video_links_to_generation(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        Sanctum::actingAs($this->admin());
+        $token = $this->postJson('/api/admin/muse-config/generate-token')->json('muse_api_token');
+        Sanctum::actingAs($this->user());
+        $res = $this->postJson('/api/generations', ['keyword' => 'Karma', 'durasi' => 60, 'model' => 'narasi', 'via_muse' => true])->assertCreated();
+
+        $file = \Illuminate\Http\UploadedFile::fake()->create('karma.mp4', 2048, 'video/mp4');
+        $this->post('/api/muse/upload-video', ['file' => $file, 'job_id' => $res->json('muse_job_id')], ['Accept' => 'application/json'])->assertUnauthorized();
+        $up = $this->post('/api/muse/upload-video', ['file' => $file, 'job_id' => $res->json('muse_job_id')], ['Accept' => 'application/json', 'X-Muse-Token' => $token])->assertCreated();
+
+        $g = VideoGeneration::find($res->json('generation.id'));
+        $this->assertStringStartsWith('/storage/videos/karma-job', $g->video_url);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($up->json('file_path'));
+        $this->assertTrue(\App\Models\MediaAsset::where('user_id', $this->user()->id)->where('type', 'video')->exists());
+    }
 }

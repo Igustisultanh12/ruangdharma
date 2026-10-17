@@ -73,12 +73,17 @@ class MuseController extends Controller
     }
     public function webhook(Request $request, MuseService $muse)
     {
-        if ($r = $this->checkMuseToken($request, $muse)) return $r;
+        // Sesuai docs/MUSE_INTEGRATION.md: X-Muse-Signature (HMAC-SHA256 body dgn MUSE_WEBHOOK_SECRET),
+        // header X-Muse-Webhook-Secret, ATAU X-Muse-Token (MUSE_API_TOKEN).
+        $authorized = $muse->verifyWebhookSignature($request->header('X-Muse-Signature'), $request->getContent())
+            || $muse->verifyWebhookSecret($request->header('X-Muse-Webhook-Secret'))
+            || $muse->verifyToken($request->header('X-Muse-Token'), $request->bearerToken());
+        if (!$authorized) return response()->json(['success' => false, 'message' => 'Unauthorized. Signature / token webhook tidak valid.'], 401);
         $data = $request->validate(['job_id' => 'required|integer|exists:muse_jobs,id', 'status' => 'required|in:completed,failed,processing', 'result' => 'sometimes|array', 'error' => 'sometimes|string']);
         $job = MuseJob::findOrFail($data['job_id']);
         if ($data['status'] === 'completed') $muse->completeJob($job, $data['result'] ?? []);
         elseif ($data['status'] === 'failed') $muse->failJob($job, $data['error'] ?? 'Gagal dari Muse');
-        else $job->markProcessing();
+        else $muse->markProcessing($job);
         return response()->json(['success' => true, 'ok' => true, 'job_id' => $job->id, 'status' => $job->fresh()->status]);
     }
     /**
@@ -107,17 +112,22 @@ class MuseController extends Controller
         $path = $file->storeAs('videos', $filename, 'public');
         $videoUrl = '/storage/' . $path;
         $fullUrl = rtrim(config('app.url'), '/') . $videoUrl;
-        // Link ke VideoGeneration jika ada job_id / generation_id — update video_url agar langsung bisa di-play di Riwayat.
+        // Link ke VideoGeneration jika ada job_id / generation_id — update video_url agar langsung bisa diputar di detail video.
         $generation = null;
         if (!empty($data['generation_id'])) $generation = \App\Models\VideoGeneration::find($data['generation_id']);
         elseif ($jobId) $generation = \App\Models\VideoGeneration::where('muse_job_id', $jobId)->first();
         if ($generation) {
-            $generation->update(['video_url' => $fullUrl, 'video_files' => array_values(array_unique(array_merge((array) ($generation->video_files ?? []), [$filename])))]);
+            // Simpan URL relatif (/storage/...) agar tetap benar walau APP_URL salah / domain berganti.
+            $generation->update(['video_url' => $videoUrl, 'video_files' => array_values(array_unique(array_merge((array) ($generation->video_files ?? []), [$videoUrl])))]);
+            \App\Services\NotificationService::notify($generation->user, 'Video Muse terunggah', "File video \"{$generation->keyword}\" sudah bisa diputar di Riwayat.");
         }
-        // Simpan juga ke MediaAsset agar muncul di Media Library
-        try {
-            \App\Models\MediaAsset::create(['title' => ($keyword ? $keyword . ' — Video' : 'Video Muse') . ($jobId ? " (Job #{$jobId})" : ''), 'file_path' => $videoUrl, 'type' => 'video', 'tags' => ['muse', 'auto-upload'], 'user_id' => $generation?->user_id ?? MuseJob::find($jobId)?->user_id ?? 1, 'mime' => $file->getMimeType(), 'size' => $file->getSize()]);
-        } catch (\Throwable $e) { /* MediaAsset opsional, jangan gagalkan upload */ }
+        // Simpan juga ke Media Library (hanya bila pemiliknya jelas — tidak lagi jatuh ke user id 1).
+        $ownerId = $generation?->user_id ?? ($jobId ? MuseJob::find($jobId)?->user_id : null);
+        if ($ownerId) {
+            try {
+                \App\Models\MediaAsset::create(['title' => ($keyword ? $keyword . ' — Video' : 'Video Muse') . ($jobId ? " (Job #{$jobId})" : ''), 'file_path' => $videoUrl, 'type' => 'video', 'tags' => ['muse', 'auto-upload'], 'user_id' => $ownerId, 'mime' => $file->getMimeType(), 'size' => $file->getSize()]);
+            } catch (\Throwable $e) { /* Media opsional, jangan gagalkan upload */ }
+        }
         return response()->json(['success' => true, 'message' => 'Video berhasil di-upload ke web.', 'video_url' => $fullUrl, 'video_url_relative' => $videoUrl, 'file_path' => $path, 'filename' => $filename, 'size' => $file->getSize(), 'job_id' => $jobId, 'generation_id' => $generation?->id], 201);
     }
 }

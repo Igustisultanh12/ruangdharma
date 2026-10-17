@@ -15,10 +15,13 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\QuotaPlanController;
 use App\Http\Controllers\ApiKeyController;
 use App\Http\Controllers\WebhookController;
+use App\Http\Controllers\RealtimeController;
 
 // ---------- Auth (public, throttle) ----------
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
-Route::post('/register', [AuthController::class, 'register'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('/register', [AuthController::class, 'register'])->middleware(['auth:sanctum', 'role:admin,super_admin']);
+
+Route::get('/app-info', [SettingController::class, 'publicInfo']);
 
 // ---------- Templates (public) ----------
 Route::get('/templates', [TemplateController::class, 'index']);
@@ -32,6 +35,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/muse/jobs/pending', [MuseController::class, 'pendingJobs']);
     Route::get('/muse/jobs/{id}', [MuseController::class, 'showJob']);
     Route::post('/muse/webhook', [MuseController::class, 'webhook']);
+    // Upload file video hasil Muse (multipart, X-Muse-Token) → langsung tampil di detail video & Media.
     Route::post('/muse/upload-video', [MuseController::class, 'uploadVideo']);
 });
 
@@ -46,12 +50,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
+    // POST (multipart) untuk upload avatar — PHP tidak mem-parsing body multipart pada PUT.
+    Route::post('/profile', [ProfileController::class, 'update']);
+
+    // Realtime pulse (polling ringan, lihat RealtimeController)
+    Route::get('/realtime/pulse', [RealtimeController::class, 'pulse']);
     Route::post('/profile/password', [ProfileController::class, 'updatePassword']);
 
     // Generate / riwayat
     Route::get('/generations', [VideoGenerationController::class, 'index']);
     Route::post('/generations', [VideoGenerationController::class, 'store']);
     Route::get('/generations/calendar', [VideoGenerationController::class, 'calendar']);
+    Route::get('/generations/counts', [VideoGenerationController::class, 'counts']);
     Route::get('/generations/{id}', [VideoGenerationController::class, 'show']);
     Route::get('/generations/{id}/download-txt', [VideoGenerationController::class, 'downloadTxt']);
     Route::delete('/generations/{id}', [VideoGenerationController::class, 'destroy']);
@@ -143,6 +153,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ---------- Workflow approval (editor ke atas) ----------
     Route::middleware('role:admin,super_admin,editor')->group(function () {
+        Route::get('/review-queue', [VideoGenerationController::class, 'reviewQueue']);
         Route::post('/generations/{id}/approve', [VideoGenerationController::class, 'approve']);
         Route::post('/generations/{id}/reject', [VideoGenerationController::class, 'reject']);
         Route::post('/generations/{id}/publish', [VideoGenerationController::class, 'publish']);
