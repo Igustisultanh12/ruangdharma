@@ -9,6 +9,7 @@ import AdminUsers from '../views/Admin/Users.vue';
 import AdminHistory from '../views/Admin/History.vue';
 import AdminSettings from '../views/Admin/Settings.vue';
 import AdminMuseStatus from '../views/Admin/MuseStatus.vue';
+import AdminMuseConfig from '../views/Admin/MuseConfig.vue';
 const routes = [
   { path:'/', component: Dashboard, meta:{auth:true} },
   { path:'/login', component: Login },
@@ -20,6 +21,7 @@ const routes = [
   { path:'/admin/history', component: AdminHistory, meta:{auth:true, admin:true} },
   { path:'/admin/settings', component: AdminSettings, meta:{auth:true, admin:true} },
   { path:'/admin/muse', component: AdminMuseStatus, meta:{auth:true, admin:true} },
+  { path:'/admin/muse-config', component: AdminMuseConfig, meta:{auth:true, admin:true} },
 ];
 const router = createRouter({ history: createWebHistory(), routes });
 router.beforeEach((to, from, next)=>{

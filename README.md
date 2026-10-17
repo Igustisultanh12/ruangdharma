@@ -393,9 +393,37 @@ php artisan cache:clear
 
 ---
 
-# Cara Buat Token Muse (Lengkap)
 
-## Apa Itu `MUSE_API_TOKEN`?
+---
+
+# Cara Buat & Kelola Token Muse via Menu Admin (Cara Baru — Disarankan)
+
+Tidak perlu edit `.env` manual lagi. Setelah web jalan dan kamu login sebagai **admin**, buka:
+
+**Admin → Integrasi Muse (Token)** — atau langsung `/admin/muse-config`
+
+Di halaman itu kamu bisa:
+
+| Yang bisa dilakukan | Caranya |
+|---|---|
+| Lihat `MUSE_API_TOKEN` | Token tampil ter-mask `a1b2c3••••••••e7f8` → klik **Tampilkan** untuk lihat full, **Salin** untuk copy |
+| Buat token baru | Klik **Generate Token Baru** → konfirmasi → token baru 64 karakter hex langsung dibuat (`bin2hex(random_bytes(32))`) dan tersimpan terenkripsi di database. Token lama langsung tidak berlaku. |
+| Lihat / buat `MUSE_WEBHOOK_SECRET` | Sama seperti token, tapi tombol **Generate Secret Baru**. Secret selalu dibuat beda dari token. |
+| Atur `MUSE_BASE_URL` & `MUSE_TIMEOUT` | Isi form (Base URL kosong = pakai generator lokal; Timeout 5–60 detik) → klik **Simpan Pengaturan** |
+| Cek koneksi | Klik **Periksa Koneksi** / **Test Koneksi Muse** / **Test Generate via Muse** |
+| Contoh curl | Tersedia di bawah halaman, dengan token ter-mask. Klik **Salin curl** (tampilkan token dulu untuk curl lengkap). |
+
+**Catatan penting:**
+- Token disimpan terenkripsi (`encrypt()` Laravel) di tabel `settings` (`muse_api_token`, `muse_webhook_secret`). Tanpa `APP_KEY` yang benar, token tidak bisa di-decrypt.
+- Banner kuning setelah generate: "Simpan token ini..." — token tetap bisa dilihat lagi lewat tombol **Tampilkan** karena tersimpan di database, tapi tetap jangan dibagikan sembarangan.
+- Jika token sudah pernah dibuat lewat menu Admin, token di database yang dipakai (prioritas utama). Token di `.env` hanya fallback jika database kosong.
+- Setelah `git pull` update ini di aaPanel, jalankan `php artisan migrate --force` (untuk migrasi `2026_10_17_000004_add_muse_config_to_settings_table`) lalu `npm run build`.
+
+---
+
+# Cara Buat Token Muse via .env (Cara Lama — Tetap Didukung sebagai Fallback)
+
+## Apa Itu `MUSE_API_TOKEN`? (Cara Lama via .env)
 
 `MUSE_API_TOKEN` adalah **password rahasia** antara web Laravel kamu dan Muse.
 - Web kamu hanya menerima request dari Muse jika request itu membawa token yang benar di header `X-Muse-Token`.

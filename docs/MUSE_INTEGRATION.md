@@ -1,5 +1,32 @@
 # Integrasi Muse — Ruang Dharma Studio
 
+## Cara Baru: Kelola Token via Menu Admin (Disarankan)
+
+Tidak perlu edit `.env` manual. Login sebagai **admin** → **Admin → Integrasi Muse (Token)** (`/admin/muse-config`).
+
+- **Lihat token:** `MUSE_API_TOKEN` & `MUSE_WEBHOOK_SECRET` tampil ter-mask, klik **Tampilkan** / **Salin**.
+- **Generate token baru:** klik **Generate Token Baru** (konfirmasi dulu). Token baru = 64 karakter hex (`bin2hex(random_bytes(32))`), disimpan terenkripsi di tabel `settings`. Token lama langsung tidak berlaku.
+- **Generate webhook secret baru:** tombol **Generate Secret Baru** — selalu beda dari token.
+- **Atur Base URL & Timeout:** form `MUSE_BASE_URL` (kosong = generator lokal) + `MUSE_TIMEOUT` 5–60 detik → **Simpan**.
+- **Tes koneksi:** tombol **Periksa Koneksi** / **Test Koneksi Muse** / **Test Generate via Muse**, plus contoh curl ter-mask.
+
+### Endpoint Admin (auth Sanctum + role admin)
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| `GET` | `/api/admin/muse-config?show=1` | Lihat config (full token hanya jika `show=1`) |
+| `POST` | `/api/admin/muse-config/generate-token` | Buat `MUSE_API_TOKEN` baru |
+| `POST` | `/api/admin/muse-config/generate-webhook-secret` | Buat `MUSE_WEBHOOK_SECRET` baru |
+| `PUT` | `/api/admin/muse-config` | Update `muse_base_url`, `muse_timeout` |
+| `POST` | `/api/admin/muse-config/test` | Tes koneksi (eksternal jika Base URL diisi, internal jika kosong) |
+
+### Prioritas token
+1. Database (`settings.muse_api_token`, terenkripsi) — hasil generate di menu Admin.
+2. `.env` (`MUSE_API_TOKEN`) — fallback jika database kosong (cara lama tetap didukung).
+3. Validasi di `POST /api/muse/*` menerima token dari **keduanya** (DB atau env).
+
+## Cara Lama: Token via `.env` (Fallback)
+
+
 ## Gambaran
 Laravel ini adalah **server** untuk Ruang Dharma Studio. Muse (agen AI) bisa:
 1. **Mengecek koneksi** via `GET /api/muse/status` / `/health`
@@ -12,7 +39,8 @@ Sebaliknya, Laravel juga bisa memanggil Muse jika Muse menyediakan endpoint (lih
 ## Auth
 Semua endpoint `/api/muse/*` kecuali `/health` butuh token:
 - Header: `X-Muse-Token: <MUSE_API_TOKEN>` ATAU `Authorization: Bearer <MUSE_API_TOKEN>`
-- Token di `.env`: `MUSE_API_TOKEN=...` (min 32 karakter, ganti di produksi)
+- **Cara baru (disarankan):** generate & lihat token di menu Admin → Integrasi Muse. Token disimpan terenkripsi di database.
+- **Cara lama (fallback):** token di `.env`: `MUSE_API_TOKEN=...` (min 32 karakter, ganti di produksi). Dipakai hanya jika database kosong.
 - Webhook memakai `MUSE_WEBHOOK_SECRET` via header `X-Muse-Signature` (HMAC SHA256 dari body) atau `X-Muse-Token`.
 
 ## Endpoints
@@ -76,11 +104,12 @@ Response: `{"ok":true,"job_id":12,"status":"completed"}`
 ## Laravel → Muse (opsional, jika Muse punya endpoint)
 Jika Muse menyediakan endpoint HTTP (misal `MUSE_BASE_URL`), Laravel bisa memanggilnya via `MuseService::requestGenerationFromMuse()`:
 - `POST {MUSE_BASE_URL}/generate` dengan header `Authorization: Bearer {MUSE_API_TOKEN}` dan body sama seperti di atas.
-- Atur `MUSE_BASE_URL` di `.env`. Jika tidak diisi, Laravel memakai generator lokal (`ScriptGeneratorService`) dan menandai job `source=local`.
+- Atur `MUSE_BASE_URL` di menu Admin (atau `.env` sebagai fallback). Jika tidak diisi, Laravel memakai generator lokal (`ScriptGeneratorService`) dan menandai job `source=local`.
 
 ## Panel Admin Vue
-- `Admin/MuseStatus.vue` memanggil `GET /api/muse/status` via `services/muse.js`, tampilkan Terhubung/Tidak, terakhir aktif, latency, tombol "Periksa Koneksi" & "Test Generate via Muse".
-- Jika status gagal, tampilkan pesan error + cara cek token di `.env`.
+- `Admin/MuseConfig.vue` (route `/admin/muse-config`) — halaman Integrasi Muse lengkap: card token & webhook secret (Show/Hide, Copy, Generate), form Base URL + Timeout, status koneksi, contoh curl. `Admin/MuseStatus.vue` tetap ada sebagai wrapper ke halaman ini (route `/admin/muse`).
+- `services/muse.js` menyediakan `getMuseConfig`, `generateMuseToken`, `generateMuseWebhookSecret`, `updateMuseConfig`, `testMuseConfig`.
+- Jika status gagal, tampilkan pesan error + cara cek token di menu Admin (atau `.env` fallback).
 
 ## Keamanan
 - Jangan commit `.env` (token) ke git.

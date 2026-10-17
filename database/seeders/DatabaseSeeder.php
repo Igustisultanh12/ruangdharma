@@ -11,5 +11,8 @@ class DatabaseSeeder extends Seeder {
         Setting::setValue('daily_limit', '5');
         Setting::setValue('blocked_keywords', json_encode(['politik','judi','pornografi','kekerasan']));
         Setting::setValue('app_name', 'Ruang Dharma Studio');
+        Setting::setValue('muse_base_url', '');
+        Setting::setValue('muse_timeout', '15');
+        // muse_api_token & muse_webhook_secret TIDAK di-seed — admin generate lewat menu Admin > Integrasi Muse.
     }
 }
