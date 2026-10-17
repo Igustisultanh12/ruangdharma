@@ -17,6 +17,7 @@ const routes = [
     page('/media', 'media', () => import('@/views/MediaLibrary.vue'), 'Media'),
     page('/notifications', 'notifications', () => import('@/views/Notifications.vue'), 'Notifikasi'),
     page('/profile', 'profile', () => import('@/views/Profile.vue'), 'Profil'),
+    page('/social', 'social', () => import('@/views/Social.vue'), 'Medsos'),
     page('/admin/review', 'admin.review', () => import('@/views/Admin/ReviewQueue.vue'), 'Antrean review', { parent: adm, meta: { roles: REVIEWERS } }),
     { ...admin('/admin', 'admin.dashboard', () => import('@/views/Admin/Dashboard.vue'), 'Ringkasan admin'), meta: { auth: true, roles: ADMIN, title: 'Ringkasan admin', breadcrumb: [adm, { label: 'Ringkasan' }] } },
     admin('/admin/analytics', 'admin.analytics', () => import('@/views/Admin/Analytics.vue'), 'Analitik'),

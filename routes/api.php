@@ -37,6 +37,9 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::post('/muse/webhook', [MuseController::class, 'webhook']);
     // Upload file video hasil Muse (multipart, X-Muse-Token) → langsung tampil di detail video & Media.
     Route::post('/muse/upload-video', [MuseController::class, 'uploadVideo']);
+    Route::get('/muse/social/publishes/pending', [\App\Http\Controllers\Api\MuseSocialController::class, 'pendingPublishes']);
+    Route::post('/muse/social/publish-webhook', [\App\Http\Controllers\Api\MuseSocialController::class, 'publishWebhook']);
+    Route::post('/muse/social/stats-webhook', [\App\Http\Controllers\Api\MuseSocialController::class, 'statsWebhook']);
 });
 
 // ---------- Eksternal via X-Api-Key ----------
@@ -74,6 +77,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/generations/{id}/naskah', [VideoGenerationController::class, 'updateNaskah']);
     Route::post('/generations/{id}/versions/{versionId}/restore', [VideoGenerationController::class, 'restoreVersion']);
     Route::get('/quota', [VideoGenerationController::class, 'quota']);
+
+    // Medsos — statistik & publish via Muse (IG/FB auto, TikTok manual)
+    Route::get('/social/stats', [\App\Http\Controllers\SocialController::class, 'stats']);
+    Route::get('/social/publishes', [\App\Http\Controllers\SocialController::class, 'publishes']);
+    Route::post('/social/publish', [\App\Http\Controllers\SocialController::class, 'publish']);
+    Route::post('/social/refresh', [\App\Http\Controllers\SocialController::class, 'refresh']);
 
     // Komentar
     Route::get('/generations/{generationId}/comments', [CommentController::class, 'index']);

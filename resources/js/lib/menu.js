@@ -13,6 +13,7 @@ export const menu = [
             { label: 'Kalender konten', to: '/calendar', icon: 'calendar-days', name: 'calendar' },
             { label: 'Media', to: '/media', icon: 'images', name: 'media' },
             { label: 'Notifikasi', to: '/notifications', icon: 'bell', name: 'notifications', badge: 'unread' },
+            { label: 'Medsos', to: '/social', icon: 'share-2', name: 'social' },
         ],
     },
     {
