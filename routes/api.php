@@ -6,6 +6,7 @@ use App\Http\Controllers\VideoGenerationController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\Api\MuseController;
+use App\Http\Controllers\Admin\MuseConfigController;
 
 // Auth (public)
 Route::post('/login', [AuthController::class, 'login']);
@@ -42,5 +43,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/settings', [SettingController::class, 'index']);
         Route::put('/settings', [SettingController::class, 'update']);
         Route::get('/muse/status', [MuseController::class, 'status']);
+        // Konfigurasi Muse via menu Admin (generate & tampilkan token, tanpa edit .env)
+        Route::get('/muse-config', [MuseConfigController::class, 'show']);
+        Route::post('/muse-config/generate-token', [MuseConfigController::class, 'generateToken']);
+        Route::post('/muse-config/generate-webhook-secret', [MuseConfigController::class, 'generateWebhookSecret']);
+        Route::put('/muse-config', [MuseConfigController::class, 'update']);
+        Route::post('/muse-config/test', [MuseConfigController::class, 'test']);
     });
 });
