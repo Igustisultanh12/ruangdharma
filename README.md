@@ -391,6 +391,46 @@ php artisan cache:clear
 # lalu reload website di aaPanel
 ```
 
+### Troubleshooting: `Please provide a valid cache path.` (HTTP 500, `InvalidArgumentException`)
+
+Error ini muncul setelah `git clone` karena folder `storage/framework/{sessions,views,cache/data}`, `storage/logs`, dan `bootstrap/cache` kosong / tidak ada. Folder-folder itu diabaikan git (`.gitignore`), jadi clone baru tidak membawanya — Laravel lalu gagal di `Compiler.php` (Blade compiler tidak menemukan cache path yang valid).
+
+**Perbaikan cepat di aaPanel (Terminal / SSH):**
+
+```bash
+cd /www/wwwroot/ruangdharma
+
+# 1. Buat folder yang hilang (jika belum ada)
+mkdir -p storage/app/public \
+  storage/framework/cache/data \
+  storage/framework/sessions \
+  storage/framework/views \
+  storage/framework/testing \
+  storage/logs \
+  bootstrap/cache
+
+# 2. Perbaiki kepemilikan & permission (aaPanel: user www)
+chown -R www:www storage bootstrap/cache
+chmod -R 775 storage bootstrap/cache
+
+# 3. Bersihkan cache Laravel
+php artisan config:clear
+php artisan cache:clear
+php artisan view:clear
+php artisan route:clear
+
+# 4. (Opsional) cache ulang untuk produksi
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+# 5. Reload website di aaPanel, lalu buka lagi domainnya
+```
+
+**Kenapa ini tidak terulang lagi:** repo sekarang menyertakan file `.gitkeep` di setiap folder wajib (`storage/app/.gitkeep`, `storage/framework/cache/data/.gitkeep`, `storage/framework/sessions/.gitkeep`, `storage/framework/views/.gitkeep`, `storage/logs/.gitkeep`, `bootstrap/cache/.gitkeep`) plus `.gitignore` di `storage/` dan `bootstrap/cache/` yang mengabaikan isi tapi TIDAK mengabaikan `.gitkeep` (`!.gitkeep` / `!**/.gitkeep`). Jadi `git clone` / `git pull` berikutnya akan membuat folder-folder itu otomatis.
+
+**Jika masih error setelah langkah di atas:** cek `storage/logs/laravel.log` — pastikan `APP_KEY` sudah ter-generate (`php artisan key:generate`) dan `storage/framework/views` bisa ditulis (`ls -ld storage/framework/views` harus `www:www` + `775`).
+
 ---
 
 
