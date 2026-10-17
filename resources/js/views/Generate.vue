@@ -34,6 +34,19 @@
         </fieldset>
       </div>
 
+      <label class="flex items-start gap-3 mt-5 p-3 rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 cursor-pointer">
+        <input type="checkbox" v-model="viaMuse" class="mt-1 h-4 w-4 accent-violet-600" />
+        <span>
+          <span class="font-semibold text-sm text-violet-800 dark:text-violet-200">Generate via Muse — video beneran (Cara 2)</span>
+          <span class="block text-xs text-slate-600 dark:text-slate-300 mt-0.5">Job dikirim ke Muse di chat. Muse akan generate video (6 klip) lalu kirim balik via webhook. Status akan update otomatis di bawah. Kalau tidak dicentang, web hanya generate naskah + caption + prompt visual secara lokal.</span>
+        </span>
+      </label>
+      <div v-if="museJob" class="mt-4 p-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-sm">
+        <p class="font-semibold text-amber-800 dark:text-amber-200">Job Muse #{{ museJob.id }} — {{ museJob.status }}</p>
+        <p class="text-slate-600 dark:text-slate-300 mt-1">{{ museJob.message || 'Menunggu Muse generate video...' }}</p>
+        <p class="text-xs text-slate-500 mt-1">Halaman ini akan cek status tiap 10 detik. Kamu juga bisa cek di chat Muse: "cek job baru". Setelah selesai, video & naskah akan muncul di Riwayat.</p>
+        <button v-if="museJob.status === 'completed'" @click="loadJobResult" class="btn-primary btn-sm mt-2">Lihat Hasil</button>
+      </div>
       <p class="text-sm text-slate-500 dark:text-slate-400 mt-4">Sisa kuota: <b class="text-slate-900 dark:text-white">{{ store.quota.remaining }} / {{ store.quota.limit }}</b> video</p>
       <button @click="doGenerate" :disabled="store.loading || !keyword.trim()" class="btn-primary mt-3 w-full">
         <svg v-if="store.loading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" d="M12 3a9 9 0 109 9" /></svg>
@@ -111,13 +124,14 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import Swal from 'sweetalert2';
 import { useGenerateStore } from '../stores/generate.js';
 import { useNotificationStore } from '../stores/notifications.js';
 import { useAuthStore } from '../stores/auth.js';
 import { getGenerateDefaults } from '../services/preferences.js';
+import api from '../services/api.js';
 import { logActivity } from '../services/activity.js';
 import LoadingSteps from '../components/LoadingSteps.vue';
 
@@ -127,6 +141,9 @@ const auth = useAuthStore();
 const route = useRoute();
 
 const keyword = ref('Rwa Bhineda');
+const viaMuse = ref(false);
+const museJob = ref(null);
+let musePoll = null;
 const durasi = ref(60);
 const model = ref('narasi');
 const current = ref(0);
@@ -170,11 +187,42 @@ function applyQuery() {
 async function doGenerate() {
   current.value = 0;
   tab.value = 'preview';
+  museJob.value = null;
+  if (musePoll) { clearInterval(musePoll); musePoll = null; }
   try {
+    if (viaMuse.value) {
+      // Cara 2 — via Muse: kirim job queued, lalu polling status tiap 10 detik
+      const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, via_muse: true });
+      museJob.value = { id: data.muse_job_id, status: data.job_status || 'queued', message: data.message };
+      logActivity({ action: 'generate', description: `Generate via Muse "${keyword.value}" (${durasi.value} dtk, ${model.value}) — job #${data.muse_job_id}`, user: auth.user });
+      notif.push({ title: 'Job dikirim ke Muse', message: `Job #${data.muse_job_id} untuk "${keyword.value}" sedang menunggu Muse generate video.`, type: 'info', link: '/history' });
+      Swal.fire({ icon: 'info', title: 'Job dikirim ke Muse', text: `Job #${data.muse_job_id} dibuat. Buka chat Muse dan bilang "cek job baru" agar Muse generate videonya, lalu hasil akan balik ke web via webhook.` });
+      musePoll = setInterval(async () => {
+        try {
+          const { data: gen } = await api.get(`/generations/${data.generation.id}`);
+          const g = gen.data || gen;
+          if (g.status === 'completed') {
+            clearInterval(musePoll); musePoll = null;
+            museJob.value = { ...museJob.value, status: 'completed', message: 'Video selesai! Lihat di Riwayat.' };
+            notif.push({ title: 'Video via Muse selesai', message: `"${keyword.value}" sudah jadi.`, type: 'success', link: '/history' });
+          } else if (g.status === 'failed') {
+            clearInterval(musePoll); musePoll = null;
+            museJob.value = { ...museJob.value, status: 'failed', message: 'Job gagal. Cek Riwayat / hubungi admin.' };
+          } else {
+            museJob.value = { ...museJob.value, status: g.status || 'waiting_muse' };
+          }
+        } catch {}
+      }, 10000);
+      return;
+    }
     const data = await store.generate({ keyword: keyword.value.trim(), durasi: durasi.value, model: model.value });
     logActivity({ action: 'generate', description: `Generate video "${keyword.value}" (${durasi.value} dtk, ${model.value})`, user: auth.user });
     notif.push({ title: 'Video berhasil dibuat', message: `"${data?.result?.judul || keyword.value}" siap dilihat di Riwayat.`, type: 'success', link: '/history' });
   } catch (e) { /* error sudah ditampilkan dari store */ }
+}
+async function loadJobResult() {
+  // Arahkan ke Riwayat — hasil lengkap (naskah + video_url) ada di sana
+  window.location.href = '/history';
 }
 async function copyText(text, label) {
   try {

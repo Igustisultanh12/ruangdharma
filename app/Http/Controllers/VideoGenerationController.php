@@ -29,6 +29,14 @@ class VideoGenerationController extends Controller
         $user = $request->user();
         $check = $quota->check($user, $data['keyword']);
         if (!$check['allowed']) return response()->json(['success' => false, 'message' => $check['reason']], $check['code']);
+        // Cara 2 — Generate via Muse (video beneran): buat MuseJob queued + VideoGeneration waiting_muse, jangan langsung completed.
+        if ($request->boolean('via_muse') || $request->boolean('async')) {
+            $museService = app(\App\Services\MuseService::class);
+            $job = $museService->createJob($user->id, $data['keyword'], (int) $data['durasi'], $data['model'], null);
+            $g = VideoGeneration::create(['user_id' => $user->id, 'keyword' => $data['keyword'], 'durasi' => (int) $data['durasi'], 'model' => $data['model'], 'naskah' => [], 'caption' => 'Menunggu Muse — video sedang dibuat...', 'prompts' => [], 'status' => 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
+            ActivityLogger::fromRequest($request, 'generate', "Generate via Muse: {$data['keyword']} ({$data['model']}, {$data['durasi']}s) — job #{$job->id} queued", ['generation_id' => $g->id, 'muse_job_id' => $job->id]);
+            return response()->json(['success' => true, 'message' => 'Job dikirim ke Muse. Video akan muncul setelah Muse selesai generate dan kirim webhook.', 'generation' => $g, 'muse_job_id' => $job->id, 'job_status' => 'queued', 'quota_remaining' => $quota->remaining($user)], 201);
+        }
         $result = $gen->generate($data['keyword'], (int) $data['durasi'], $data['model']);
         $g = VideoGeneration::create([
             'user_id' => $user->id, 'keyword' => $data['keyword'], 'durasi' => (int) $data['durasi'], 'model' => $data['model'],

@@ -115,3 +115,31 @@ Jika Muse menyediakan endpoint HTTP (misal `MUSE_BASE_URL`), Laravel bisa memang
 - Jangan commit `.env` (token) ke git.
 - Rotasi token: ganti `MUSE_API_TOKEN` di server + di Muse secara bersamaan.
 - Rate limit: `throttle:60,1` pada grup API Muse (lihat `routes/api.php`).
+
+## Cara 2 — Generate via Muse (Video Beneran)
+
+Web hanya generate naskah + caption + prompt lokal. Untuk video beneran, pakai alur async via Muse:
+
+1. **Web → Job queued:** User di halaman Generate centang **"Generate via Muse — video beneran"**, lalu klik Generate.
+   - `POST /api/generations` dengan `{ via_muse: true }` → bikin `MuseJob` status `queued` + `VideoGeneration` status `waiting_muse`.
+   - Atau langsung `POST /api/muse/generate` dengan `{ async: true }` → return `{ job_id, status: "queued" }`.
+   - Web polling status tiap 10 detik.
+
+2. **Muse → Cek job:** Di chat Muse, jalankan:
+   ```bash
+   python3 ~/workspace/custom-connectors/custom.ruangdharma/bin/ruangdharma.py pending
+   ```
+   Menampilkan job `queued` / `processing` (id, keyword, durasi, model, user).
+
+3. **Muse → Generate video:** Muse generate 6 klip video + naskah + caption di chat, lalu kirim balik:
+   ```bash
+   python3 .../ruangdharma.py complete --job-id 12 --video-url "https://..." --result-json hasil.json
+   # hasil.json berisi { naskah, caption, prompts, video_url, video_files }
+   ```
+   Ini memanggil `POST /api/muse/webhook` dengan `{ job_id, status: "completed", result: {...} }`.
+
+4. **Web → Completed:** `MuseService::completeJob` update `VideoGeneration` yang sudah ada (berdasarkan `muse_job_id`) menjadi `status=completed`, `video_url` + `video_files` tersimpan, `workflow_status=draft`. Muncul di Riwayat.
+
+Endpoint baru:
+- `GET /api/muse/jobs/pending` (butuh token) — list job queued/processing.
+- `POST /api/muse/generate` dengan `async=true` / `via_muse=true` — buat job queued, tidak langsung completed.

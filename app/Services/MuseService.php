@@ -53,8 +53,14 @@ class MuseService
     public function completeJob(MuseJob $job, array $result): MuseJob
     {
         $job = $job->markCompleted($result);
+        $videoUrl = $result['video_url'] ?? $result['videoUrl'] ?? null;
+        $videoFiles = $result['video_files'] ?? $result['videoFiles'] ?? null;
         if ($job->user_id) {
-            VideoGeneration::create(['user_id' => $job->user_id, 'keyword' => $job->keyword, 'durasi' => $job->durasi, 'model' => $job->model, 'naskah' => $result['naskah'] ?? [], 'caption' => static::captionText($result['caption'] ?? null), 'prompts' => $result['prompts'] ?? [], 'status' => 'completed', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
+            // Jika VideoGeneration draft sudah ada (dari generate async via web), update itu. Jika belum ada, buat baru.
+            $existing = VideoGeneration::where('muse_job_id', $job->id)->first();
+            $attrs = ['user_id' => $job->user_id, 'keyword' => $job->keyword, 'durasi' => $job->durasi, 'model' => $job->model, 'naskah' => $result['naskah'] ?? [], 'caption' => static::captionText($result['caption'] ?? null), 'prompts' => $result['prompts'] ?? [], 'status' => 'completed', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft', 'video_url' => $videoUrl, 'video_files' => $videoFiles];
+            if ($existing) $existing->update($attrs);
+            else VideoGeneration::create($attrs);
         }
         return $job;
     }

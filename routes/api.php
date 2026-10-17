@@ -29,6 +29,7 @@ Route::get('/muse/health', [MuseController::class, 'health']);
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/muse/status', [MuseController::class, 'status']);
     Route::post('/muse/generate', [MuseController::class, 'generate']);
+    Route::get('/muse/jobs/pending', [MuseController::class, 'pendingJobs']);
     Route::get('/muse/jobs/{id}', [MuseController::class, 'showJob']);
     Route::post('/muse/webhook', [MuseController::class, 'webhook']);
 });
