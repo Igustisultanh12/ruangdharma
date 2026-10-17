@@ -11,7 +11,7 @@ import Spinner from '@/components/ui/Spinner.vue';
 import PhonePreview from './PhonePreview.vue';
 import api, { errorMessage } from '@/lib/api.js';
 import { downloadFromApi } from '@/lib/download.js';
-import { captionText, dateTime, modelColor, modelLabel, partText, relative, workflowColor, workflowLabel, WORKFLOW } from '@/lib/format.js';
+import { captionText, dateTime, GEN_STATUS, isPendingMuse, modelColor, modelLabel, partText, relative, workflowColor, workflowLabel, WORKFLOW } from '@/lib/format.js';
 import { confirmDialog, copyText, toast } from '@/lib/toast.js';
 import { useRealtime } from '@/composables/useRealtime.js';
 import { useAuthStore } from '@/stores/auth.js';
@@ -167,6 +167,8 @@ const download = () => downloadFromApi(`/generations/${props.id}/download-txt`, 
                 <Badge :color="workflowColor(g.workflow_status)" :icon="WORKFLOW[g.workflow_status]?.icon">{{ workflowLabel(g.workflow_status) }}</Badge>
                 <Badge v-if="g.is_favorite" color="yellow" icon="star">Favorit</Badge>
                 <Badge v-if="g.is_archived" color="zinc" icon="archive">Arsip</Badge>
+                <Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon">{{ GEN_STATUS[g.status].label }}</Badge>
+                <Badge v-if="g.video_url" color="sky" icon="film">Video Muse</Badge>
             </div>
             <div v-else class="skeleton h-7 w-48"></div>
             <p v-if="g" class="mt-1 text-sm text-muted">
@@ -181,7 +183,21 @@ const download = () => downloadFromApi(`/generations/${props.id}/download-txt`, 
                 <Segmented v-model="tab" :options="tabs" class="mb-5" />
 
                 <!-- Pratinjau -->
-                <div v-if="tab === 'preview'" class="py-2"><PhonePreview :naskah="g.naskah || []" :title="g.keyword" :model="g.model" /></div>
+                <div v-if="tab === 'preview'" class="py-2">
+                    <div v-if="isPendingMuse(g)" class="rounded-3xl border-2 border-dashed border-sky-300 bg-sky-50 p-6 text-center text-sm text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                        <Icon name="hourglass" class="mx-auto mb-2 h-8 w-8" />
+                        <p class="font-bold">{{ GEN_STATUS[g.status].label }} — job #{{ g.muse_job_id }}</p>
+                        <p class="mt-1">Video, naskah & caption muncul di sini otomatis setelah Muse mengirim hasilnya.</p>
+                    </div>
+                    <div v-else-if="g.video_url" class="space-y-3">
+                        <video :src="g.video_url" controls playsinline class="mx-auto max-h-[65vh] rounded-2xl border-2 border-ink bg-black"></video>
+                        <div class="flex flex-wrap justify-center gap-2">
+                            <a :href="g.video_url" target="_blank" rel="noopener" class="btn btn-secondary btn-sm"><Icon name="external-link" class="h-4 w-4" /> Buka video</a>
+                            <a v-for="(f, i) in g.video_files || []" :key="i" :href="typeof f === 'string' ? f : f.url" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><Icon name="film" class="h-4 w-4" /> Klip {{ i + 1 }}</a>
+                        </div>
+                    </div>
+                    <PhonePreview v-else :naskah="g.naskah || []" :title="g.keyword" :model="g.model" />
+                </div>
 
                 <!-- Naskah -->
                 <div v-else-if="tab === 'naskah'">

@@ -10,7 +10,7 @@ import Pagination from '@/components/ui/Pagination.vue';
 import SearchInput from '@/components/ui/SearchInput.vue';
 import Segmented from '@/components/ui/Segmented.vue';
 import api, { errorMessage } from '@/lib/api.js';
-import { captionText, DURATIONS, MODELS, modelColor, modelLabel, partText, relative, WORKFLOW, workflowColor, workflowLabel } from '@/lib/format.js';
+import { captionText, DURATIONS, MODELS, modelColor, modelLabel, partText, relative, WORKFLOW, workflowColor, workflowLabel, GEN_STATUS } from '@/lib/format.js';
 import { confirmDialog, toast } from '@/lib/toast.js';
 import { useList } from '@/composables/useList.js';
 import { useRealtime } from '@/composables/useRealtime.js';
@@ -137,7 +137,7 @@ const regenerate = (g) => router.push({ path: '/generate', query: { keyword: g.k
                             </td>
                             <td><Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge></td>
                             <td class="tabular-nums">{{ g.durasi }} dtk</td>
-                            <td><Badge :color="workflowColor(g.workflow_status)" dot>{{ workflowLabel(g.workflow_status) }}</Badge></td>
+                            <td><Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon">{{ GEN_STATUS[g.status].label }}</Badge><Badge v-else :color="workflowColor(g.workflow_status)" dot>{{ workflowLabel(g.workflow_status) }}</Badge></td>
                             <td class="whitespace-nowrap text-muted">{{ relative(g.created_at) }}</td>
                             <td @click.stop>
                                 <div class="flex justify-end gap-1">
@@ -154,7 +154,7 @@ const regenerate = (g) => router.push({ path: '/generate', query: { keyword: g.k
             <div v-else class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
                 <article v-for="g in list.items.value" :key="g.id" class="group card card-lift relative flex cursor-pointer flex-col p-5" @click="detailId = g.id">
                     <div class="flex items-start justify-between gap-2">
-                        <Badge :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge>
+                        <Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon" size="xs">{{ GEN_STATUS[g.status].label }}</Badge><Badge v-else :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge>
                         <button type="button" class="-m-1 rounded-lg p-1" :aria-label="g.is_favorite ? 'Hapus dari favorit' : 'Jadikan favorit'" @click.stop="toggleFav(g)"><Icon name="star" :class="g.is_favorite ? 'fill-yellow-400 text-yellow-500' : 'text-muted'" class="h-4 w-4" /></button>
                     </div>
                     <h3 class="mt-3 font-display text-lg font-bold">{{ g.keyword }}</h3>

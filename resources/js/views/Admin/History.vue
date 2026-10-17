@@ -10,7 +10,7 @@ import Pagination from '@/components/ui/Pagination.vue';
 import SearchInput from '@/components/ui/SearchInput.vue';
 import api from '@/lib/api.js';
 import { downloadFromApi, openHtmlFromApi } from '@/lib/download.js';
-import { dateTime, MODELS, modelColor, modelLabel, WORKFLOW, workflowColor, workflowLabel } from '@/lib/format.js';
+import { dateTime, MODELS, modelColor, modelLabel, WORKFLOW, workflowColor, workflowLabel, GEN_STATUS } from '@/lib/format.js';
 import { useList } from '@/composables/useList.js';
 
 const list = useList('/admin/history', { perPage: 20, filters: { search: '', user_id: '', model: '', workflow_status: '', date_from: '', date_to: '', sort: 'latest' }, realtime: ['all_generations'] });
@@ -57,7 +57,7 @@ const exportParams = () => Object.fromEntries(Object.entries({ user_id: f.user_i
                             <td><Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge></td>
                             <td class="tabular-nums">{{ g.durasi }} dtk</td>
                             <td><Badge :color="g.source === 'muse' ? 'sky' : g.source === 'auto_daily' ? 'lime' : 'slate'" size="xs">{{ g.source === 'muse' ? 'Muse' : g.source === 'auto_daily' ? 'Otomatis' : 'Studio' }}</Badge></td>
-                            <td><Badge :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge></td>
+                            <td><Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon" size="xs">{{ GEN_STATUS[g.status].label }}</Badge><Badge v-else :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge></td>
                             <td class="whitespace-nowrap text-muted">{{ dateTime(g.created_at) }}</td>
                         </tr>
                     </tbody>

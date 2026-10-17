@@ -242,4 +242,28 @@ class AppFlowTest extends TestCase
         $this->assertGreaterThanOrEqual(1, $this->getJson("/api/webhooks/{$hook}/logs")->assertOk()->json('data.total'));
         $this->getJson('/api/app-info')->assertOk()->assertJsonPath('data.app_name', 'Ruang Dharma Studio');
     }
+
+    public function test_generate_via_muse_async_then_webhook_completes(): void
+    {
+        Sanctum::actingAs($this->admin());
+        $token = $this->postJson('/api/admin/muse-config/generate-token')->json('muse_api_token');
+
+        Sanctum::actingAs($this->user());
+        $res = $this->postJson('/api/generations', ['keyword' => 'Nyepi', 'durasi' => 60, 'model' => 'narasi', 'via_muse' => true])->assertCreated();
+        $gid = $res->json('generation.id');
+        $jobId = $res->json('muse_job_id');
+        $this->assertSame('waiting_muse', $res->json('generation.status'));
+
+        $this->getJson('/api/muse/jobs/pending', ['X-Muse-Token' => $token])->assertOk()->assertJsonPath('count', 1);
+        $this->postJson('/api/muse/webhook', ['job_id' => $jobId, 'status' => 'processing'], ['X-Muse-Token' => $token])->assertOk();
+        $this->assertSame('processing', VideoGeneration::find($gid)->status);
+        $this->postJson('/api/muse/webhook', ['job_id' => $jobId, 'status' => 'completed', 'result' => ['video_url' => 'https://cdn.test/nyepi.mp4']], ['X-Muse-Token' => $token])->assertOk();
+
+        $g = VideoGeneration::find($gid);
+        $this->assertSame('completed', $g->status);
+        $this->assertSame('https://cdn.test/nyepi.mp4', $g->video_url);
+        $this->assertCount(6, $g->naskah, 'naskah dilengkapi generator lokal bila Muse hanya kirim video');
+        $this->assertTrue(Notification::where('user_id', $this->user()->id)->where('title', 'Video via Muse selesai')->exists());
+        $this->assertSame(1, VideoGeneration::where('muse_job_id', $jobId)->count());
+    }
 }

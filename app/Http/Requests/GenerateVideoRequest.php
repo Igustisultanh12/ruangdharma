@@ -11,6 +11,8 @@ class GenerateVideoRequest extends FormRequest
             'keyword' => 'required|string|max:100',
             'durasi' => 'required|integer|in:30,60,90',
             'model' => 'required|string|in:narasi,ngobrol,gabungan',
+            'via_muse' => 'sometimes|boolean',
+            'async' => 'sometimes|boolean',
         ];
     }
     public function messages(): array

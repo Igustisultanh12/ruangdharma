@@ -100,6 +100,16 @@ export function workflowColor(v) {
     return WORKFLOW[v]?.color || 'slate';
 }
 
+/* Status proses (kolom `status`): Cara 2 via Muse memakai waiting_muse → processing → completed / failed. */
+export const GEN_STATUS = {
+    waiting_muse: { label: 'Menunggu Muse', color: 'sky', icon: 'hourglass' },
+    processing: { label: 'Muse memproses', color: 'violet', icon: 'loader-circle' },
+    failed: { label: 'Muse gagal', color: 'rose', icon: 'circle-x' },
+};
+export function isPendingMuse(g) {
+    return g && ['waiting_muse', 'processing'].includes(g.status);
+}
+
 export const ROLE_LABELS = {
     super_admin: 'Super Admin',
     admin: 'Admin',

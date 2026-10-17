@@ -7,7 +7,7 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 import Icon from '@/components/ui/Icon.vue';
 import StatCard from '@/components/ui/StatCard.vue';
 import api from '@/lib/api.js';
-import { date, greeting, isoDate, modelColor, modelLabel, relative, time, workflowColor, workflowLabel } from '@/lib/format.js';
+import { date, greeting, isoDate, modelColor, modelLabel, relative, time, workflowColor, workflowLabel, GEN_STATUS } from '@/lib/format.js';
 import { useRealtime } from '@/composables/useRealtime.js';
 import { useAuthStore } from '@/stores/auth.js';
 
@@ -94,7 +94,7 @@ onMounted(async () => {
                                 <span class="text-xs text-muted">{{ relative(g.created_at) }}</span>
                             </span>
                             <Badge :color="modelColor(g.model)" size="xs" class="hidden sm:inline-flex">{{ modelLabel(g.model) }}</Badge>
-                            <Badge :color="workflowColor(g.workflow_status)" dot>{{ workflowLabel(g.workflow_status) }}</Badge>
+                            <Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon">{{ GEN_STATUS[g.status].label }}</Badge><Badge v-else :color="workflowColor(g.workflow_status)" dot>{{ workflowLabel(g.workflow_status) }}</Badge>
                         </button>
                     </li>
                 </ul>

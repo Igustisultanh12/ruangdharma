@@ -10,7 +10,7 @@ import Icon from '@/components/ui/Icon.vue';
 import StatCard from '@/components/ui/StatCard.vue';
 import api from '@/lib/api.js';
 import { modelHex, workflowHex } from '@/lib/colors.js';
-import { date, greeting, modelColor, modelLabel, relative, workflowColor, workflowLabel, WORKFLOW } from '@/lib/format.js';
+import { date, greeting, modelColor, modelLabel, relative, workflowColor, workflowLabel, WORKFLOW, GEN_STATUS } from '@/lib/format.js';
 import { useRealtime } from '@/composables/useRealtime.js';
 import { useAuthStore } from '@/stores/auth.js';
 
@@ -86,7 +86,7 @@ const actionIcon = (a = '') => (a.startsWith('login') ? 'log-in' : a.startsWith(
                                 <td><div class="flex items-center gap-2"><Avatar :user="g.user" size="xs" /><span class="max-w-28 truncate text-sm font-semibold">{{ g.user?.name }}</span></div></td>
                                 <td class="font-bold">{{ g.keyword }}</td>
                                 <td><Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge></td>
-                                <td><Badge :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge></td>
+                                <td><Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon" size="xs">{{ GEN_STATUS[g.status].label }}</Badge><Badge v-else :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge></td>
                                 <td class="whitespace-nowrap text-muted">{{ relative(g.created_at) }}</td>
                             </tr>
                         </tbody>

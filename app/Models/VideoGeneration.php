@@ -15,13 +15,13 @@ class VideoGeneration extends Model
 
     protected $fillable = [
         'user_id', 'keyword', 'durasi', 'model', 'naskah', 'caption', 'prompts',
-        'status', 'source', 'muse_job_id',
+        'status', 'source', 'muse_job_id', 'video_url', 'video_files',
         'is_favorite', 'is_archived',
         'workflow_status', 'review_note', 'reviewed_by', 'reviewed_at', 'publish_at',
     ];
     protected $casts = [
         'naskah' => 'array', 'prompts' => 'array', 'durasi' => 'integer',
-        'is_favorite' => 'boolean', 'is_archived' => 'boolean',
+        'is_favorite' => 'boolean', 'is_archived' => 'boolean', 'video_files' => 'array',
         'reviewed_at' => 'datetime', 'publish_at' => 'datetime',
     ];
 

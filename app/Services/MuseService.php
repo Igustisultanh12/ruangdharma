@@ -60,12 +60,38 @@ class MuseService
     public function completeJob(MuseJob $job, array $result): MuseJob
     {
         $job = $job->markCompleted($result);
+        $videoUrl = $result['video_url'] ?? $result['videoUrl'] ?? null;
+        $videoFiles = $result['video_files'] ?? $result['videoFiles'] ?? null;
         if ($job->user_id) {
-            VideoGeneration::create(['user_id' => $job->user_id, 'keyword' => $job->keyword, 'durasi' => $job->durasi, 'model' => $job->model, 'naskah' => $result['naskah'] ?? [], 'caption' => static::captionText($result['caption'] ?? null), 'prompts' => $result['prompts'] ?? [], 'status' => 'completed', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
+            // Jika Muse hanya mengirim video tanpa naskah, lengkapi naskah/caption/prompt dari generator lokal
+            // agar detail video di web tidak kosong.
+            if (empty($result['naskah'])) {
+                $local = app(ScriptGeneratorService::class)->generate($job->keyword, (int) $job->durasi, $job->model);
+                $result += ['naskah' => $local['naskah'], 'caption' => $local['caption'], 'prompts' => $local['prompts']];
+                $result['naskah'] = $result['naskah'] ?: $local['naskah'];
+            }
+            // Jika VideoGeneration draft sudah ada (dari generate async via web), update itu. Jika belum ada, buat baru.
+            $existing = VideoGeneration::where('muse_job_id', $job->id)->first();
+            $attrs = ['user_id' => $job->user_id, 'keyword' => $job->keyword, 'durasi' => $job->durasi, 'model' => $job->model, 'naskah' => $result['naskah'] ?? [], 'caption' => static::captionText($result['caption'] ?? null), 'prompts' => $result['prompts'] ?? [], 'status' => 'completed', 'source' => 'muse', 'muse_job_id' => $job->id, 'video_url' => $videoUrl, 'video_files' => $videoFiles];
+            if ($existing) $existing->update($attrs);
+            else VideoGeneration::create($attrs + ['workflow_status' => 'draft']);
+            NotificationService::notify($job->user, 'Video via Muse selesai', "Video \"{$job->keyword}\" dari Muse sudah jadi" . ($videoUrl ? ' lengkap dengan file videonya.' : '.'));
         }
         return $job;
     }
-    public function failJob(MuseJob $job, string $error): MuseJob { return $job->markFailed($error); }
+    public function failJob(MuseJob $job, string $error): MuseJob
+    {
+        $job = $job->markFailed($error);
+        VideoGeneration::where('muse_job_id', $job->id)->where('status', '!=', 'completed')->update(['status' => 'failed', 'caption' => 'Muse gagal membuat video: ' . mb_substr($error, 0, 500)]);
+        if ($job->user_id) NotificationService::notify($job->user, 'Video via Muse gagal', "Muse gagal membuat \"{$job->keyword}\": " . mb_substr($error, 0, 200));
+        return $job;
+    }
+    public function markProcessing(MuseJob $job): MuseJob
+    {
+        $job = $job->markProcessing();
+        VideoGeneration::where('muse_job_id', $job->id)->where('status', 'waiting_muse')->update(['status' => 'processing']);
+        return $job;
+    }
     public function requestGenerationFromMuse(string $keyword, int $durasi, string $model): ?array
     {
         $base = $this->getBaseUrl(); $token = $this->getApiToken();

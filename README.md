@@ -48,6 +48,7 @@ role, notifikasi & log hanya di `localStorage` browser (hilang saat ganti perang
 - **Kalender konten** (drag & drop untuk menjadwalkan), **Media** (drag & drop upload gambar/video), **Notifikasi**
 - **Admin**: ringkasan, analitik (7/14/30/90 hari, tabel & grafik, ekspor CSV), semua video (ekspor CSV / cetak PDF), pengguna, role & izin, paket kuota,
   pengaturan (umum, generate otomatis, keamanan, template notifikasi), integrasi Muse (token & webhook secret terenkripsi), API key, webhook + log, log aktivitas, riwayat login
+- **Buat video beneran via Muse (Cara 2)** — centang opsi di halaman Buat video; job dikirim ke Muse, statusnya (menunggu → diproses → selesai/gagal) terbarui realtime, video & klip tampil di detail video. Lihat `docs/MUSE_INTEGRATION.md`.
 - **Auto generate harian** `app:generate-daily` (scheduler)
 - Integrasi Muse: `GET /api/muse/status`, `POST /api/muse/generate`, `GET /api/muse/jobs/{id}`, `POST /api/muse/webhook`, `GET /api/muse/health`. Lihat `docs/MUSE_INTEGRATION.md`.
 

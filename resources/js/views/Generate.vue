@@ -11,8 +11,9 @@ import Segmented from '@/components/ui/Segmented.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import api, { errorMessage } from '@/lib/api.js';
 import { saveText } from '@/lib/download.js';
-import { DURATIONS, generationToText, MODELS, partText } from '@/lib/format.js';
+import { captionText, DURATIONS, GEN_STATUS, generationToText, MODELS, partText } from '@/lib/format.js';
 import { copyText, toast } from '@/lib/toast.js';
+import { useRealtime } from '@/composables/useRealtime.js';
 import { useAuthStore } from '@/stores/auth.js';
 import { useRealtimeStore } from '@/stores/realtime.js';
 
@@ -34,6 +35,25 @@ const error = ref(null); // { kind, message }
 const tab = ref('naskah');
 const detailId = ref(null);
 const sending = ref(false);
+const viaMuse = ref(false);
+const museGen = ref(null); // VideoGeneration status waiting_muse / processing / completed / failed
+
+// Cara 2 — status job Muse ikut terbarui realtime (tanpa polling manual / refresh).
+useRealtime(['generations'], refreshMuse);
+async function refreshMuse() {
+    if (!museGen.value || ['completed', 'failed'].includes(museGen.value.status)) return;
+    try {
+        const g = (await api.get(`/generations/${museGen.value.id}`)).data.data;
+        museGen.value = g;
+        if (g.status === 'completed') {
+            generation.value = g;
+            result.value = { judul: g.keyword, keyword: g.keyword, durasi: g.durasi, model: g.model, naskah: g.naskah || [], prompts: g.prompts || [], caption: captionText(g.caption), video_url: g.video_url, video_files: g.video_files };
+            tab.value = g.video_url ? 'video' : 'naskah';
+        }
+    } catch {
+        /* coba lagi di pulse berikutnya */
+    }
+}
 
 const quota = computed(() => rt.quota || { limit: auth.user?.quota?.limit ?? 0, used: auth.user?.quota?.used_today ?? 0, remaining: auth.user?.quota?.remaining ?? 0 });
 const outOfQuota = computed(() => rt.quota && rt.quota.remaining <= 0);
@@ -52,6 +72,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function generate() {
     if (!canGenerate.value) return;
+    if (viaMuse.value) return generateViaMuse();
+    museGen.value = null;
     loading.value = true;
     error.value = null;
     result.value = null;
@@ -71,6 +93,23 @@ async function generate() {
         error.value = { kind: status === 429 ? 'quota' : status === 422 && /diblokir/i.test(message) ? 'blocked' : 'other', message };
     } finally {
         clearInterval(ticker);
+        loading.value = false;
+    }
+}
+
+async function generateViaMuse() {
+    loading.value = true;
+    error.value = null;
+    result.value = null;
+    try {
+        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, via_muse: true });
+        museGen.value = data.generation;
+        rt.pulseNow();
+    } catch (e) {
+        const status = e.response?.status;
+        const message = errorMessage(e, 'Gagal mengirim job ke Muse.');
+        error.value = { kind: status === 429 ? 'quota' : status === 422 && /diblokir/i.test(message) ? 'blocked' : 'other', message };
+    } finally {
         loading.value = false;
     }
 }
@@ -139,6 +178,14 @@ function download() {
                     </div>
                 </div>
 
+                <label class="flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-3 transition" :class="viaMuse ? 'border-ink bg-sky-50 shadow-brutal-sm dark:bg-sky-500/10' : 'border-line hover:border-violet-300'">
+                    <input v-model="viaMuse" type="checkbox" class="checkbox mt-0.5" />
+                    <span class="min-w-0">
+                        <span class="flex items-center gap-1.5 text-sm font-bold"><Icon name="film" class="h-4 w-4 text-sky-500" /> Buat video beneran via Muse</span>
+                        <span class="mt-0.5 block text-xs text-muted">Job dikirim ke Muse; Muse membuat 6 klip video lalu mengirim hasil lewat webhook. Statusnya terbarui otomatis di sini. Tanpa centang, studio hanya menyusun naskah, caption & prompt.</span>
+                    </span>
+                </label>
+
                 <div class="rounded-2xl bg-surface-2 p-3">
                     <div class="flex items-center justify-between text-sm">
                         <span class="font-semibold">Sisa kuota hari ini</span>
@@ -152,7 +199,7 @@ function download() {
                 <button v-ripple type="submit" class="btn btn-primary btn-lg shine w-full" :disabled="!canGenerate">
                     <Spinner v-if="loading" class="h-5 w-5" />
                     <Icon v-else name="wand-sparkles" class="h-5 w-5" />
-                    {{ loading ? 'Sedang membuat…' : outOfQuota ? 'Kuota hari ini habis' : 'Buat video' }}
+                    {{ loading ? (viaMuse ? 'Mengirim ke Muse…' : 'Sedang membuat…') : outOfQuota ? 'Kuota hari ini habis' : viaMuse ? 'Kirim ke Muse' : 'Buat video' }}
                 </button>
             </form>
         </section>
@@ -162,6 +209,35 @@ function download() {
             <div v-if="loading" class="card p-8">
                 <p class="mb-6 font-display text-lg font-bold">Menyusun "{{ keyword }}"…</p>
                 <CanangLoader :steps="STEPS" :current="step" />
+            </div>
+
+            <div v-else-if="museGen && museGen.status !== 'completed'" class="card-brutal overflow-hidden">
+                <div class="flex flex-wrap items-center gap-4 border-b-2 border-ink bg-sky-300 p-5 text-zinc-900">
+                    <span class="grid h-12 w-12 place-items-center rounded-2xl border-2 border-ink bg-white"><Icon :name="museGen.status === 'failed' ? 'circle-x' : 'film'" class="h-6 w-6" /></span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-bold opacity-80">Job Muse #{{ museGen.muse_job_id }}</p>
+                        <h2 class="font-display text-2xl font-bold">{{ museGen.keyword }}</h2>
+                    </div>
+                    <Badge :color="GEN_STATUS[museGen.status]?.color || 'slate'" :icon="GEN_STATUS[museGen.status]?.icon">{{ GEN_STATUS[museGen.status]?.label || museGen.status }}</Badge>
+                </div>
+                <div class="grid gap-6 p-6 md:grid-cols-[160px_1fr] md:items-center">
+                    <div class="mx-auto"><CanangMark :size="140" :lit="museGen.status === 'processing' ? 3 : museGen.status === 'failed' ? 0 : 1" :active="museGen.status === 'processing' ? 2 : 0" stroke="currentColor" class="text-ink" /></div>
+                    <div>
+                        <p v-if="museGen.status === 'failed'" class="text-sm text-rose-600 dark:text-rose-400">{{ captionText(museGen.caption) }}</p>
+                        <template v-else>
+                            <ol class="space-y-2 text-sm">
+                                <li class="flex items-center gap-2"><Icon name="circle-check" class="h-4 w-4 text-emerald-500" /> Job tersimpan &amp; kuota terpakai</li>
+                                <li class="flex items-center gap-2"><Icon :name="museGen.status === 'processing' ? 'circle-check' : 'hourglass'" :class="museGen.status === 'processing' ? 'text-emerald-500' : 'text-amber-500'" class="h-4 w-4" /> Muse mengambil job (di chat Muse: <b>"cek job baru"</b>)</li>
+                                <li class="flex items-center gap-2"><Icon name="hourglass" class="h-4 w-4 text-muted" /> Muse membuat 6 klip video lalu mengirim webhook</li>
+                            </ol>
+                            <p class="mt-4 rounded-2xl bg-surface-2 p-3 text-xs text-muted">Halaman ini terbarui sendiri begitu Muse selesai. Kamu juga boleh pindah halaman — hasilnya tetap muncul di Riwayat & notifikasi.</p>
+                        </template>
+                        <div class="mt-4 flex gap-2">
+                            <RouterLink to="/history" class="btn btn-secondary btn-sm"><Icon name="clapperboard" class="h-4 w-4" /> Buka Riwayat</RouterLink>
+                            <button type="button" class="btn btn-ghost btn-sm" @click="museGen = null">Buat yang lain</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div v-else-if="error" class="card-brutal p-6">
@@ -187,7 +263,7 @@ function download() {
                         <div class="dot-bg absolute inset-0 opacity-20"></div>
                         <div class="relative flex flex-wrap items-center justify-between gap-4">
                             <div>
-                                <p class="text-sm font-bold text-white/80">Siap tayang · {{ result.durasi }} detik · {{ MODELS.find((m) => m.value === result.model)?.label }}</p>
+                                <p class="text-sm font-bold text-white/80">{{ result.video_url ? 'Video dari Muse' : 'Siap tayang' }} · {{ result.durasi }} detik · {{ MODELS.find((m) => m.value === result.model)?.label }}</p>
                                 <h2 class="mt-1 font-display text-3xl font-bold">{{ result.judul }}</h2>
                             </div>
                             <div class="flex flex-wrap gap-2">
@@ -201,8 +277,15 @@ function download() {
                     <div class="grid grid-cols-1 gap-6 p-6 2xl:grid-cols-[300px_1fr]">
                         <PhonePreview :naskah="result.naskah" :title="result.judul" :model="result.model" />
                         <div class="min-w-0">
-                            <Segmented v-model="tab" :options="[{ value: 'naskah', label: 'Naskah', icon: 'file-text' }, { value: 'caption', label: 'Caption', icon: 'hash' }, { value: 'prompts', label: 'Prompt visual', icon: 'image' }]" class="mb-4" />
-                            <ol v-if="tab === 'naskah'" class="space-y-2.5">
+                            <Segmented v-model="tab" :options="[...(result.video_url ? [{ value: 'video', label: 'Video Muse', icon: 'film' }] : []), { value: 'naskah', label: 'Naskah', icon: 'file-text' }, { value: 'caption', label: 'Caption', icon: 'hash' }, { value: 'prompts', label: 'Prompt visual', icon: 'image' }]" class="mb-4" />
+                            <div v-if="tab === 'video'" class="space-y-3">
+                                <video :src="result.video_url" controls playsinline class="max-h-[70vh] w-full rounded-2xl border-2 border-ink bg-black"></video>
+                                <div class="flex flex-wrap gap-2">
+                                    <a :href="result.video_url" target="_blank" rel="noopener" class="btn btn-secondary btn-sm"><Icon name="external-link" class="h-4 w-4" /> Buka video</a>
+                                    <a v-for="(f, i) in result.video_files || []" :key="i" :href="typeof f === 'string' ? f : f.url" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><Icon name="film" class="h-4 w-4" /> Klip {{ i + 1 }}</a>
+                                </div>
+                            </div>
+                            <ol v-else-if="tab === 'naskah'" class="space-y-2.5">
                                 <li v-for="n in result.naskah" :key="n.bagian" class="flex gap-3 rounded-2xl border border-line p-3.5">
                                     <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ink text-xs font-extrabold text-surface">{{ n.bagian }}</span>
                                     <div class="min-w-0 flex-1">
@@ -226,7 +309,7 @@ function download() {
                         </div>
                     </div>
                 </div>
-                <div class="rounded-3xl border-2 border-dashed border-line p-4 text-sm text-muted">
+                <div v-if="result.aturan" class="rounded-3xl border-2 border-dashed border-line p-4 text-sm text-muted">
                     <b class="text-ink">Aturan Ruang Dharma diterapkan:</b> {{ result.aturan?.pembuka }} di awal, {{ result.aturan?.penutup }} di akhir · {{ result.aturan?.visual }} · {{ result.aturan?.suara }}.
                 </div>
             </div>
