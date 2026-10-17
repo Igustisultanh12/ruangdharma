@@ -24,6 +24,8 @@ Route::post('/register', [AuthController::class, 'register'])->middleware(['auth
 
 Route::get('/app-info', [SettingController::class, 'publicInfo']);
 Route::get('/mobile/config', [\App\Http\Controllers\PushController::class, 'mobileConfig']);
+Route::get('/mobile/app-update', [\App\Http\Controllers\AppUpdateController::class, 'latest'])->middleware('throttle:60,1');
+Route::get('/mobile/app-update/download', [\App\Http\Controllers\AppUpdateController::class, 'download'])->middleware('throttle:30,1');
 
 // ---------- Templates (public) ----------
 Route::get('/templates', [TemplateController::class, 'index']);
@@ -147,6 +149,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Settings (umum + per tab)
         Route::get('/push-config', [\App\Http\Controllers\PushController::class, 'adminShow']);
         Route::post('/push-config', [\App\Http\Controllers\PushController::class, 'adminUpdate']);
+        Route::get('/app-update', [\App\Http\Controllers\AppUpdateController::class, 'adminInfo']);
+        Route::post('/app-update', [\App\Http\Controllers\AppUpdateController::class, 'store']);
+        Route::delete('/app-update', [\App\Http\Controllers\AppUpdateController::class, 'destroy']);
+        Route::post('/app-update/sync-github', [\App\Http\Controllers\AppUpdateController::class, 'syncGitHub']);
+        Route::post('/app-update/notify', [\App\Http\Controllers\AppUpdateController::class, 'notify']);
         Route::get('/settings', [SettingController::class, 'index']);
         Route::get('/settings/{tab}', [SettingController::class, 'getByTab']);
         Route::put('/settings', [SettingController::class, 'update']);

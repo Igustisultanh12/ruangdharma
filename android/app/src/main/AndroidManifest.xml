@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <application
         android:name=".RuangDharmaApplication"
         android:allowBackup="false"
@@ -35,6 +36,18 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        <!-- Hasil pemasangan pembaruan aplikasi PackageInstaller -->
+        <receiver
+            android:name=".data.update.UpdateInstallReceiver"
+            android:exported="false" />
+        <!-- Broadcast penanganan selesai perbarui aplikasi -->
+        <receiver
+            android:name=".data.update.UpdatePackageReplacedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_rd" />

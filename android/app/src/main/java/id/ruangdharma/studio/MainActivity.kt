@@ -54,6 +54,7 @@ import com.google.gson.JsonObject
 import id.ruangdharma.studio.data.api.RetrofitClient
 import id.ruangdharma.studio.data.api.TokenStore
 import id.ruangdharma.studio.data.model.*
+import id.ruangdharma.studio.data.update.AppUpdater
 import id.ruangdharma.studio.notify.NotificationHelper
 import id.ruangdharma.studio.notify.NotificationSync
 import id.ruangdharma.studio.notify.PushManager
@@ -308,6 +309,8 @@ fun RuangDharmaApp(openRequest: String? = null, onOpenHandled: () -> Unit = {}) 
         // Notifikasi HP: penanda awal, sinkron latar belakang, push FCM, izin Android 13+.
         launch { loadNotifications(); syncSystemNotifications() }
         NotificationSync.schedule(context)
+        AppUpdater.schedule(context)
+        launch { AppUpdater.autoCheckOnOpen(context) }
         launch { pushActive = PushManager.setup(context, api) }
         requestNotifPermission()
         var stamps: Map<String, String>? = null
@@ -352,6 +355,8 @@ fun RuangDharmaApp(openRequest: String? = null, onOpenHandled: () -> Unit = {}) 
     RuangDharmaTheme(darkTheme = dark) {
         val c = Rd.colors
         val toggleDark: () -> Unit = { scope.launch { TokenStore.saveDark(context, !dark) } }
+
+        UpdatePromptHost()
 
         if (booting) { Splash(); return@RuangDharmaTheme }
 

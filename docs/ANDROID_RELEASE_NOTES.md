@@ -1,3 +1,17 @@
+# RUANGDHARMA Android v1.3.0 (versionCode 6)
+
+## Baru: Auto Update seperti di SISINDEN 🚀
+- **Pembaruan dari dalam aplikasi**: aplikasi otomatis mendeteksi jika ada rilis APK baru di server maupun di GitHub Releases.
+- **Dialog pembaruan langsung (UpdatePromptHost)**: begitu aplikasi dibuka, dialog muncul menampilkan nomor versi, catatan rilis, ukuran berkas, dan tombol "Unduh & pasang".
+- **Unduh dengan indikator progres**: progres unduhan ditampilkan secara realtime (0–100%) dan tetap berjalan di latar belakang bila dialog disembunyikan.
+- **Pemasangan langsung**: menggunakan `PackageInstaller` Android bawaan (di Android 12+ dapat terpasang tanpa dialog konfirmasi tambahan bila izin diberikan).
+- **Verifikasi integritas & keamanan**: berkas APK selalu divalidasi checksum SHA-256 dan verifikasi kesamaan sertifikat keystore rilis dengan aplikasi yang sedang terpasang sebelum memulai instalasi.
+- **Pemeriksaan berkala & perbarui otomatis (Wi-Fi)**: WorkManager memeriksa pembaruan berkala tiap 6 jam. Jika toggle "Perbarui otomatis" aktif di Profil, aplikasi mengunduh otomatis saat tersambung ke jaringan Wi-Fi.
+- **Notifikasi Push Pembaruan**: Admin dapat mengirim notifikasi instan ke seluruh HP via Firebase saat versi baru dirilis.
+- **Panel Web Admin (Pengaturan → Pembaruan APK)**: Admin dapat melihat status versi aktif, mengunggah APK secara manual, menyinkronkan dengan rilis GitHub, atau mengirim notifikasi pengumuman ke seluruh HP.
+
+---
+
 # RUANGDHARMA Android v1.2.1 (versionCode 5)
 
 ## Perbaikan

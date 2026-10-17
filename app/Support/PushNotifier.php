@@ -179,6 +179,20 @@ class PushNotifier
         ]);
     }
 
+    /** Pemberitahuan pembaruan APK ke seluruh pengguna terdaftar. */
+    public static function appUpdate(string $version, string $notes = ''): int
+    {
+        if (!Schema::hasTable('device_tokens') || !self::enabled()) return 0;
+        $userIds = DeviceToken::pluck('user_id')->filter()->unique()->all();
+        if (!$userIds) return 0;
+        return self::sendNow($userIds, [
+            'type' => 'app_update',
+            'version' => $version,
+            'title' => "Pembaruan Ruang Dharma v{$version} tersedia",
+            'body' => $notes ?: 'Ketuk untuk mengunduh dan memasang versi terbaru.',
+        ]);
+    }
+
     // ------------------------------------------------------------------ pengiriman
 
     /** Kirim setelah respons HTTP selesai agar tidak memperlambat web/aplikasi. Data FCM wajib string. */

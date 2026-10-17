@@ -4,6 +4,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import id.ruangdharma.studio.data.api.RetrofitClient
 import id.ruangdharma.studio.data.api.TokenStore
+import id.ruangdharma.studio.data.update.AppUpdater
 import kotlinx.coroutines.flow.first
 
 /**
@@ -32,6 +33,12 @@ class RdMessagingService : FirebaseMessagingService() {
                 title = title,
                 message = body,
                 force = d["test"] == "1",
+            )
+            "app_update" -> AppUpdater.onServerPush(
+                this,
+                version = d["version"].orEmpty(),
+                title = title,
+                body = body
             )
         }
     }
