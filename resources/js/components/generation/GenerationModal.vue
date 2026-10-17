@@ -9,6 +9,7 @@ import Modal from '@/components/ui/Modal.vue';
 import Segmented from '@/components/ui/Segmented.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import PhonePreview from './PhonePreview.vue';
+import AudioEditor from '@/components/AudioEditor.vue';
 import CanangLoader from '@/components/brand/CanangLoader.vue';
 import api, { errorMessage } from '@/lib/api.js';
 import { downloadFromApi } from '@/lib/download.js';
@@ -217,6 +218,7 @@ const download = () => downloadFromApi(`/generations/${props.id}/download-txt`, 
                             <a v-for="(f, i) in g.video_files || []" :key="i" :href="typeof f === 'string' ? f : f.url" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><Icon name="film" class="h-4 w-4" /> Klip {{ i + 1 }}</a>
                         </div>
                     </div>
+                    <div v-if="g.video_url" class="mt-4"><AudioEditor :generation="g" @updated="load(true)" /></div>
                     <PhonePreview v-else :naskah="g.naskah || []" :title="g.keyword" :model="g.model" />
                 </div>
 

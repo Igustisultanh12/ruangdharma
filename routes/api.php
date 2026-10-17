@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/generations/{id}/schedule-publish', [VideoGenerationController::class, 'schedulePublish']);
     Route::get('/generations/{id}/versions', [VideoGenerationController::class, 'versions']);
     Route::put('/generations/{id}/naskah', [VideoGenerationController::class, 'updateNaskah']);
+    Route::put('/generations/{id}/backsound', [VideoGenerationController::class, 'updateBacksound']);
     Route::post('/generations/{id}/versions/{versionId}/restore', [VideoGenerationController::class, 'restoreVersion']);
     Route::get('/quota', [VideoGenerationController::class, 'quota']);
 

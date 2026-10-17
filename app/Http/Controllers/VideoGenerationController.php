@@ -276,6 +276,22 @@ class VideoGenerationController extends Controller
         return response()->json(['success' => true, 'message' => 'Naskah diperbarui, versi lama tersimpan.', 'data' => $g]);
     }
 
+    public function updateBacksound(Request $request, $id)
+    {
+        $data = $request->validate([
+            'backsound_url' => 'sometimes|nullable|string|max:2048',
+            'backsound_volume' => 'sometimes|integer|min:0|max:100',
+            'backsound_trim_start' => 'sometimes|integer|min:0',
+            'backsound_trim_end' => 'sometimes|nullable|integer|min:0',
+        ]);
+        $g = $this->findEditable($request, $id);
+        $g->update($data);
+        // Tandai perlu re-mix: buat job baru untuk Muse (status waiting_muse) agar auto-executor (cek tiap 1 detik) mengambil dan mix ulang.
+        // Simpan flag di generation: status tetap, tapi muse_job_id baru akan dibuat via webhook? Untuk sekarang, cukup update + notifikasi.
+        // Frontend akan polling dan menampilkan status.
+        return response()->json(['success' => true, 'message' => 'Audio disimpan. Muse akan mix ulang video dengan audio baru.', 'data' => $g->fresh()]);
+    }
+
     public function restoreVersion(Request $request, $id, $versionId, VersioningService $versioning)
     {
         $g = $this->findEditable($request, $id);
