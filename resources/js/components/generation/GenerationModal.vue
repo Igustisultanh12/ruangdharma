@@ -9,6 +9,7 @@ import Modal from '@/components/ui/Modal.vue';
 import Segmented from '@/components/ui/Segmented.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import PhonePreview from './PhonePreview.vue';
+import CanangLoader from '@/components/brand/CanangLoader.vue';
 import api, { errorMessage } from '@/lib/api.js';
 import { downloadFromApi } from '@/lib/download.js';
 import { captionText, dateTime, GEN_STATUS, isPendingMuse, modelColor, modelLabel, partText, relative, workflowColor, workflowLabel, WORKFLOW } from '@/lib/format.js';
@@ -95,6 +96,22 @@ watch(
     { immediate: true },
 );
 useRealtime(['generations', 'review', 'comments'], () => props.id && load(true));
+// Polling 5 detik saat masih Menunggu / Diproses Muse, agar status berubah jadi Diproses + animasi loading tanpa perlu refresh manual.
+let pollTimer = null;
+const museSteps = ['Muse menerima job', 'Muse membuat naskah & caption', 'Muse membuat visual (6 klip)', 'Muse mengisi suara & subtitle', 'Muse mengunggah video ke web'];
+const museCurrent = computed(() => {
+  if (!g.value) return 0;
+  if (g.value.status === 'waiting_muse') return 0;
+  if (g.value.status === 'processing') return 2;
+  return 0;
+});
+watch(() => g.value?.status, (s) => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (s === 'waiting_muse' || s === 'processing') {
+    pollTimer = setInterval(() => load(true), 5000);
+  }
+}, { immediate: true });
+watch(() => props.id, (id) => { if (!id && pollTimer) { clearInterval(pollTimer); pollTimer = null; } });
 
 async function act(key, fn, okMsg) {
     busy.value = key;
@@ -184,10 +201,14 @@ const download = () => downloadFromApi(`/generations/${props.id}/download-txt`, 
 
                 <!-- Pratinjau -->
                 <div v-if="tab === 'preview'" class="py-2">
-                    <div v-if="isPendingMuse(g)" class="rounded-3xl border-2 border-dashed border-sky-300 bg-sky-50 p-6 text-center text-sm text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
-                        <Icon name="hourglass" class="mx-auto mb-2 h-8 w-8" />
-                        <p class="font-bold">{{ GEN_STATUS[g.status].label }} — job #{{ g.muse_job_id }}</p>
-                        <p class="mt-1">Video, naskah & caption muncul di sini otomatis setelah Muse mengirim hasilnya.</p>
+                                        <div v-if="isPendingMuse(g)" class="card p-6">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <p class="font-bold">{{ g.status === 'processing' ? 'Muse sedang memproses' : 'Menunggu Muse' }} — job #{{ g.muse_job_id }}</p>
+                          <Badge :color="GEN_STATUS[g.status]?.color || 'sky'" :icon="GEN_STATUS[g.status]?.icon || 'loader-circle'">{{ GEN_STATUS[g.status]?.label || g.status }}</Badge>
+                        </div>
+                        <p class="mt-1 text-sm text-muted">Video, naskah & caption muncul di sini otomatis setelah Muse mengirim hasilnya. Halaman ini refresh otomatis tiap 5 detik.</p>
+                        <div class="mt-5"><CanangLoader :steps="museSteps" :current="museCurrent" /></div>
+                        <div class="mt-4 flex items-center gap-2 text-sm text-muted"><Spinner class="h-4 w-4" /> {{ g.status === 'processing' ? 'Muse sedang membuat visual & suara...' : 'Muse belum mulai — job masuk antrean, akan diproses otomatis (cek tiap 30 detik).' }}</div>
                     </div>
                     <div v-else-if="g.video_url" class="space-y-3">
                         <video :src="g.video_url" controls playsinline preload="metadata" class="mx-auto max-h-[65vh] rounded-2xl border-2 border-ink bg-black"></video>
