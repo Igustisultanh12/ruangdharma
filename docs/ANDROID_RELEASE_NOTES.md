@@ -1,4 +1,12 @@
-# RUANGDHARMA Android v1.1.0 (versionCode 2)
+# RUANGDHARMA Android v1.1.1 (versionCode 3)
+
+## Perbaikan
+- **Riwayat / Beranda gagal dimuat** dengan pesan `NumberFormatException: Expected an int but was 3.1 … estimasi_detik`. Data dari Muse kadang berisi angka desimal, angka sebagai teks, 1/0 untuk ya/tidak, atau objek di kolom teks — sekarang semuanya dibaca dengan toleran, sehingga satu nilai aneh tidak lagi menggagalkan seluruh daftar.
+- Pesan error teknis diganti pesan yang mudah dipahami.
+
+---
+
+## Dari v1.1.0
 
 Login diperbaiki dan seluruh tampilan aplikasi dirombak agar **sama persis dengan UI web** Ruang Dharma Studio.
 
@@ -27,4 +35,4 @@ Semua menu terbarui otomatis tanpa refresh (memantau `/api/realtime/pulse` tiap 
 Tidak ada migrasi. Aplikasi memakai API yang sudah ada di `https://ruangdharma.my.id/api`.
 
 ## Install
-Unduh `RUANGDHARMA-1.1.0.apk` di bawah, izinkan "Instal aplikasi tidak dikenal", lalu pasang (menimpa v1.0.0). Login dengan akun Ruang Dharma.
+Unduh `RUANGDHARMA-1.1.1.apk` di bawah, izinkan "Instal aplikasi tidak dikenal", lalu pasang (menimpa versi sebelumnya). Login dengan akun Ruang Dharma.

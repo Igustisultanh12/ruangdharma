@@ -94,6 +94,8 @@ fun parseServerError(code: Int, raw: String?, fallback: String = "Permintaan gag
 }
 
 fun networkMessage(e: Exception): String = when (e) {
+    is com.google.gson.JsonParseException, is IllegalStateException, is NumberFormatException ->
+        "Format data dari server tidak dikenali. Tarik ke bawah untuk memuat ulang."
     is IOException -> "Tidak bisa terhubung ke server. Periksa koneksi internet lalu coba lagi."
     else -> e.message ?: "Terjadi kesalahan."
 }

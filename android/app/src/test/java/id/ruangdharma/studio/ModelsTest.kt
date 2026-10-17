@@ -1,12 +1,13 @@
 package id.ruangdharma.studio
 
 import com.google.gson.Gson
+import id.ruangdharma.studio.data.api.LenientGson
 import id.ruangdharma.studio.data.model.*
 import org.junit.Assert.*
 import org.junit.Test
 
 class ModelsTest {
-    private val gson = Gson()
+    private val gson: Gson = LenientGson.gson
 
     @Test fun statusLabel_mapsWaitingMuse() {
         assertEquals("Menunggu Muse", statusLabel("waiting_muse"))
@@ -61,5 +62,19 @@ class ModelsTest {
         assertEquals(120, r.data?.followers)
         assertEquals(5L, r.data?.postList()?.first()?.num("likes"))
         assertEquals("mantap", r.data?.commentList()?.first()?.str("text"))
+    }
+
+    /** Bug v1.1.0: Muse mengirim estimasi_detik = 3.1 → seluruh Riwayat gagal dimuat. */
+    @Test fun generationList_toleratesFloatsStringsAndObjects() {
+        val json = """{"success":true,"data":{"current_page":1,"total":1,"data":[{"id":"7","keyword":"Karma","durasi":60.0,"backsound_volume":"25","is_favorite":1,"review_note":{"text":"cek lagi"},"naskah":[{"bagian":1,"estimasi_detik":3.1,"teks":"Halo"}]}]}}"""
+        val type = object : com.google.gson.reflect.TypeToken<ApiWrapper<Paginator<Generation>>>() {}.type
+        val r: ApiWrapper<Paginator<Generation>> = gson.fromJson(json, type)
+        val g = r.data!!.items.first()
+        assertEquals(7, g.id)
+        assertEquals(60, g.durasi)
+        assertEquals(25, g.backsoundVolume)
+        assertTrue(g.isFavorite)
+        assertEquals("cek lagi", g.reviewNote)
+        assertEquals(3, g.naskah?.first()?.estimasiDetik)
     }
 }
