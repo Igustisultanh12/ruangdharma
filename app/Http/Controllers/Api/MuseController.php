@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class MuseController extends Controller
 {
-    protected function authorize(Request $request, MuseService $muse): ?\Illuminate\Http\JsonResponse
+    private function checkMuseToken(Request $request, MuseService $muse): ?\Illuminate\Http\JsonResponse
     {
         if (!$muse->verifyToken($request->header('X-Muse-Token'), $request->bearerToken())) {
             return response()->json(['success' => false, 'message' => 'Unauthorized. Header X-Muse-Token tidak valid.'], 401);
@@ -25,12 +25,12 @@ class MuseController extends Controller
     }
     public function status(Request $request, MuseService $muse)
     {
-        if ($r = $this->authorize($request, $muse)) return $r;
+        if ($r = $this->checkMuseToken($request, $muse)) return $r;
         return response()->json(['success' => true] + $muse->status());
     }
     public function generate(Request $request, MuseService $muse, QuotaService $quota, ScriptGeneratorService $gen)
     {
-        if ($r = $this->authorize($request, $muse)) return $r;
+        if ($r = $this->checkMuseToken($request, $muse)) return $r;
         $data = $request->validate([
             'keyword' => 'required|string|max:100', 'durasi' => 'sometimes|in:30,60,90',
             'model' => 'sometimes|in:narasi,ngobrol,gabungan', 'user_id' => 'sometimes|nullable|integer|exists:users,id',
@@ -52,12 +52,12 @@ class MuseController extends Controller
     }
     public function showJob(Request $request, $id, MuseService $muse)
     {
-        if ($r = $this->authorize($request, $muse)) return $r;
+        if ($r = $this->checkMuseToken($request, $muse)) return $r;
         return response()->json(['success' => true, 'data' => MuseJob::findOrFail($id)]);
     }
     public function webhook(Request $request, MuseService $muse)
     {
-        if ($r = $this->authorize($request, $muse)) return $r;
+        if ($r = $this->checkMuseToken($request, $muse)) return $r;
         $data = $request->validate(['job_id' => 'required|integer|exists:muse_jobs,id', 'status' => 'required|in:completed,failed,processing', 'result' => 'sometimes|array', 'error' => 'sometimes|string']);
         $job = MuseJob::findOrFail($data['job_id']);
         if ($data['status'] === 'completed') $muse->completeJob($job, $data['result'] ?? []);
