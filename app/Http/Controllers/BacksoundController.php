@@ -2,6 +2,7 @@
 namespace App\Http\Controllers;
 use App\Models\Backsound;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 class BacksoundController extends Controller
 {
@@ -24,8 +25,8 @@ class BacksoundController extends Controller
         $duration = null;
         try {
             $full = storage_path('app/public/' . $path);
-            $out = shell_exec('ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ' . escapeshellarg($full) . ' 2>/dev/null');
-            if ($out) $duration = round((float) trim($out), 1); // 1 desimal, JANGAN (int) — durasi dipakai sebagai batas atas trim
+            $result = Process::run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', $full]);
+            if ($result->successful() && trim($result->output()) !== '') $duration = round((float) trim($result->output()), 1); // 1 desimal, JANGAN (int) — durasi dipakai sebagai batas atas trim
         } catch (\Throwable $e) {}
         $bs = Backsound::create(['user_id' => $request->user()->id, 'name' => $data['name'], 'file_url' => '/storage/' . $path, 'duration_sec' => $duration]);
         return response()->json(['success' => true, 'message' => 'Backsound diunggah.', 'data' => $bs], 201);

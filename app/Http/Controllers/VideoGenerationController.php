@@ -15,10 +15,34 @@ use App\Services\ScriptGeneratorService;
 use App\Services\VersioningService;
 use App\Services\WebhookService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Process;
+use Throwable;
 
 class VideoGenerationController extends Controller
 {
     public const REVIEWER_ROLES = ['admin', 'super_admin', 'editor'];
+
+    /** Pesan bila proc_open dimatikan di php.ini (disable_functions) sehingga Process tidak bisa jalan. */
+    public const PROC_DISABLED_MESSAGE = 'Server PHP mematikan proc_open/shell_exec (disable_functions). Aktifkan proc_open di aaPanel → PHP → Konfigurasi → hapus proc_open & shell_exec dari disable_functions, lalu restart PHP.';
+
+    /** True bila exception menandakan proc_open / fungsi proses dimatikan di server. */
+    protected function isProcDisabled(Throwable $e): bool
+    {
+        $msg = mb_strtolower($e->getMessage());
+        foreach (['proc_open', 'disable_functions', 'undefined function', 'function is disabled', 'unable to launch a new process', 'unable to fork'] as $needle) {
+            if (str_contains($msg, $needle)) return true;
+        }
+
+        return false;
+    }
+
+    /** Respons 500 standar bila Process tidak bisa jalan karena proc_open dimatikan. */
+    protected function procDisabledResponse(Request $request, VideoGeneration $g, string $context)
+    {
+        ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, proc_open dimatikan di server ({$context}): {$g->keyword}", ['generation_id' => $g->id]);
+
+        return response()->json(['success' => false, 'message' => 'Mix gagal: ' . self::PROC_DISABLED_MESSAGE . ' Kolom backsound tetap tersimpan.'], 500);
+    }
 
     /** Riwayat user + search/filter/sort/favorit/arsip + pagination. */
     public function index(Request $request)
@@ -337,7 +361,15 @@ class VideoGenerationController extends Controller
 
             return response()->json(['success' => false, 'message' => 'Mix gagal: file backsound tidak ditemukan di server. Kolom backsound tetap tersimpan, silakan coba lagi.'], 500);
         }
-        $ffmpeg = trim((string) shell_exec('which ffmpeg 2>/dev/null'));
+        try {
+            $which = Process::run(['which', 'ffmpeg']);
+            $ffmpeg = trim($which->output());
+        } catch (Throwable $e) {
+            if ($this->isProcDisabled($e)) return $this->procDisabledResponse($request, $g, 'which ffmpeg');
+            ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, tidak bisa menjalankan which ffmpeg: {$g->keyword}", ['generation_id' => $g->id]);
+
+            return response()->json(['success' => false, 'message' => 'Mix gagal: tidak bisa menjalankan ffmpeg di server. Kolom backsound tetap tersimpan, silakan coba lagi.'], 500);
+        }
         if ($ffmpeg === '') {
             ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, ffmpeg tidak tersedia: {$g->keyword}", ['generation_id' => $g->id]);
 
@@ -371,21 +403,30 @@ class VideoGenerationController extends Controller
         }
         if ($hasAudio) {
             $filter = "[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo[orig];{$bg};[orig][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]";
-            $cmd = escapeshellarg($ffmpeg) . ' -y -i ' . escapeshellarg($videoPath) . ' -i ' . escapeshellarg($audioPath)
-                . ' -filter_complex ' . escapeshellarg($filter)
-                . ' -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 128k -movflags +faststart ' . escapeshellarg($outFull);
+            $ffmpegArgs = [$ffmpeg, '-y', '-i', $videoPath, '-i', $audioPath,
+                '-filter_complex', $filter,
+                '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', $outFull];
         } else {
             // Video tanpa track audio: backsound menjadi satu-satunya audio, dibatasi durasi video.
             $filter = "{$bg};[bg]anull[aout]";
             // aloop pada [bg] sudah menghasilkan stream bernama [bg]; anull meneruskannya ke [aout].
-            $cmd = escapeshellarg($ffmpeg) . ' -y -i ' . escapeshellarg($videoPath) . ' -i ' . escapeshellarg($audioPath)
-                . ' -filter_complex ' . escapeshellarg($filter)
-                . ' -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 128k -movflags +faststart';
-            if ($videoDur !== null && $videoDur > 0) $cmd .= ' -t ' . escapeshellarg((string) $videoDur);
-            $cmd .= ' ' . escapeshellarg($outFull);
+            $ffmpegArgs = [$ffmpeg, '-y', '-i', $videoPath, '-i', $audioPath,
+                '-filter_complex', $filter,
+                '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'];
+            if ($videoDur !== null && $videoDur > 0) $ffmpegArgs[] = '-t';
+            if ($videoDur !== null && $videoDur > 0) $ffmpegArgs[] = (string) $videoDur;
+            $ffmpegArgs[] = $outFull;
         }
 
-        $ffmpegOut = (string) shell_exec($cmd . ' 2>&1');
+        try {
+            $ffmpegResult = Process::timeout(120)->run($ffmpegArgs);
+            $ffmpegOut = $ffmpegResult->output() . "\n" . $ffmpegResult->errorOutput();
+        } catch (Throwable $e) {
+            if ($this->isProcDisabled($e)) return $this->procDisabledResponse($request, $g, 'ffmpeg mix');
+            ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, ffmpeg tidak bisa dijalankan: {$g->keyword}", ['generation_id' => $g->id]);
+
+            return response()->json(['success' => false, 'message' => 'Mix gagal: ffmpeg tidak bisa memproses file ini. Kolom backsound tetap tersimpan, silakan coba lagi.'], 500);
+        }
         if (! file_exists($outFull) || filesize($outFull) <= 0) {
             if (file_exists($outFull)) @unlink($outFull);
             $detail = mb_substr(trim(preg_replace('/\s+/', ' ', $ffmpegOut)), -500);
@@ -446,8 +487,15 @@ class VideoGenerationController extends Controller
     /** Durasi media (detik) via ffprobe, null bila gagal. */
     protected function probeMediaDuration(string $path): ?float
     {
-        $out = shell_exec('ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ' . escapeshellarg($path) . ' 2>/dev/null');
-        if ($out === null) return null;
+        try {
+            $result = Process::run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', $path]);
+            if (! $result->successful()) return null;
+            $out = $result->output();
+        } catch (Throwable $e) {
+            // proc_open dimatikan -> durasi tidak diketahui; pemanggil (which/ffmpeg)
+            // akan menampilkan pesan actionable. Jangan lempar error mentah ke user.
+            return null;
+        }
         $v = (float) trim($out);
 
         return $v > 0 ? $v : null;
@@ -456,9 +504,13 @@ class VideoGenerationController extends Controller
     /** Apakah file video punya track audio? */
     protected function videoHasAudio(string $path): bool
     {
-        $out = shell_exec('ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 ' . escapeshellarg($path) . ' 2>/dev/null');
+        try {
+            $result = Process::run(['ffprobe', '-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', $path]);
 
-        return $out !== null && trim((string) $out) !== '';
+            return $result->successful() && trim($result->output()) !== '';
+        } catch (Throwable $e) {
+            return false;
+        }
     }
 
     public function restoreVersion(Request $request, $id, $versionId, VersioningService $versioning)
