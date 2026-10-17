@@ -22,7 +22,7 @@ return new class extends Migration {
 
     protected function convert(string $table, string $column, string $definition): void
     {
-        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $column)) {
+        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $column) || DB::getDriverName() === 'sqlite') {
             return;
         }
         $type = DB::selectOne(
@@ -37,6 +37,9 @@ return new class extends Migration {
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
         // Kembalikan ke integer (nilai desimal yang ada akan dibulatkan MySQL).
         if (Schema::hasTable('video_generations') && Schema::hasColumn('video_generations', 'backsound_trim_start')) {
             DB::statement('ALTER TABLE `video_generations` MODIFY COLUMN `backsound_trim_start` INT NOT NULL DEFAULT 0');
