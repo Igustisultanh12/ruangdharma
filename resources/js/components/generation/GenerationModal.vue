@@ -190,7 +190,7 @@ const download = () => downloadFromApi(`/generations/${props.id}/download-txt`, 
                         <p class="mt-1">Video, naskah & caption muncul di sini otomatis setelah Muse mengirim hasilnya.</p>
                     </div>
                     <div v-else-if="g.video_url" class="space-y-3">
-                        <video :src="g.video_url" controls playsinline class="mx-auto max-h-[65vh] rounded-2xl border-2 border-ink bg-black"></video>
+                        <video :src="g.video_url" controls playsinline preload="metadata" class="mx-auto max-h-[65vh] rounded-2xl border-2 border-ink bg-black"></video>
                         <div class="flex flex-wrap justify-center gap-2">
                             <a :href="g.video_url" target="_blank" rel="noopener" class="btn btn-secondary btn-sm"><Icon name="external-link" class="h-4 w-4" /> Buka video</a>
                             <a v-for="(f, i) in g.video_files || []" :key="i" :href="typeof f === 'string' ? f : f.url" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><Icon name="film" class="h-4 w-4" /> Klip {{ i + 1 }}</a>

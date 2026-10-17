@@ -14,7 +14,7 @@ function ok() {
 </script>
 
 <template>
-    <Modal :show="confirmState.open" size="sm" @close="closeConfirm(false)">
+    <Modal :show="confirmState.open" size="sm" layer="top" @close="closeConfirm(false)">
         <div class="flex gap-4">
             <span :class="o.tone === 'danger' ? 'bg-rose-400' : 'bg-yellow-300'" class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink text-zinc-950">
                 <Icon :name="o.icon || (o.tone === 'danger' ? 'trash-2' : 'circle-question-mark')" class="h-5 w-5" />
