@@ -35,10 +35,14 @@ class AppRelease
     {
         $raw = Setting::get(self::KEY);
         $meta = $raw ? json_decode((string) $raw, true) : null;
-        if (is_array($meta) && !empty($meta['version']) && !empty($meta['path'])) {
-            // Berkas lokal yang diunggah admin
-            if (Storage::disk(self::DISK)->exists($meta['path'])) {
-                $meta['source'] = 'manual';
+        if (is_array($meta) && !empty($meta['version']) && !empty($meta['sha256'])) {
+            if (!empty($meta['path'])) {
+                if (Storage::disk(self::DISK)->exists($meta['path'])) {
+                    $meta['source'] = 'manual';
+                    return $meta;
+                }
+            } elseif (!empty($meta['download_url'])) {
+                $meta['source'] = $meta['source'] ?? 'configured';
                 return $meta;
             }
         }
