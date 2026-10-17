@@ -23,8 +23,8 @@ class MuseTokenUsageController extends Controller
         }
         $jobs = MuseJob::count();
         $totalTokens = (int) ceil($totalChars / 4);
-        // Kuota: ambil dari settings, default 1.000.000 token / bulan (bisa diubah di Pengaturan)
-        $monthlyLimit = (int) (\App\Models\Setting::get('muse_monthly_token_limit', 1000000));
+        // Kuota: ambil dari settings, default 22.000.000 token / bulan (bisa diubah di Pengaturan)
+        $monthlyLimit = (int) (\App\Models\Setting::get('muse_monthly_token_limit', 22000000));
         $monthChars = 0;
         $monthGens = VideoGeneration::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->get();
         foreach ($monthGens as $g) { $monthChars += mb_strlen(json_encode($g->naskah ?? '') . json_encode($g->caption ?? '')); }
