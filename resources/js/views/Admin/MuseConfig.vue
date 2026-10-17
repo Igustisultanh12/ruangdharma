@@ -10,6 +10,9 @@ import { confirmDialog, copyText, toast } from '@/lib/toast.js';
 import { useRealtime } from '@/composables/useRealtime.js';
 
 const cfg = ref(null);
+const tokenUsage = ref(null);
+const tokenLoading = ref(false);
+async function loadTokenUsage() { tokenLoading.value = true; try { tokenUsage.value = (await api.get('/admin/muse-config/token-usage')).data.data; } catch (e) {} finally { tokenLoading.value = false; } }
 const revealed = ref(false);
 const fresh = ref(null); // { label, value } setelah generate
 const busy = ref('');
@@ -25,7 +28,7 @@ async function load(show = revealed.value) {
         toast.error(errorMessage(e));
     }
 }
-onMounted(() => load(false));
+onMounted(() => { load(false); loadTokenUsage(); });
 useRealtime(['muse', 'settings'], () => load());
 
 async function toggleReveal() {
@@ -87,7 +90,27 @@ const curls = computed(() => [
 
 <template>
     <div>
-        <PageHeader title="Integrasi Muse" description="Kelola token API dan webhook untuk Muse langsung dari sini — tanpa mengedit file .env." />
+        <div class="card p-6 mb-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="font-display text-lg font-bold">Penggunaan Token Muse</h2>
+          <button class="btn btn-secondary btn-sm" :disabled="tokenLoading" @click="loadTokenUsage">Refresh</button>
+        </div>
+        <p class="mt-1 text-xs text-muted">Estimasi 1 token ~ 4 karakter naskah/caption. Ini pemakaian web, bukan billing resmi Muse.</p>
+        <div v-if="tokenLoading" class="mt-4 text-sm text-muted">Memuat...</div>
+        <div v-else-if="tokenUsage" class="mt-4 grid gap-4 sm:grid-cols-3">
+          <div class="rounded-2xl border-2 border-line p-4"><p class="text-sm text-muted">Token terpakai (bulan ini)</p><p class="font-display text-2xl font-bold tabular-nums">{{ tokenUsage.month_tokens?.toLocaleString('id-ID') }}</p><p class="text-xs text-muted">dari limit {{ tokenUsage.month_limit?.toLocaleString('id-ID') }} ({{ tokenUsage.percent_used }}%)</p><div class="mt-2 h-2 rounded-full bg-surface-2 overflow-hidden"><div class="h-full bg-violet-500" :style="{ width: Math.min(100, tokenUsage.percent_used) + '%' }"></div></div></div>
+          <div class="rounded-2xl border-2 border-line p-4"><p class="text-sm text-muted">Sisa token (bulan ini)</p><p class="font-display text-2xl font-bold tabular-nums text-emerald-600">{{ tokenUsage.remaining?.toLocaleString('id-ID') }}</p><p class="text-xs text-muted">Reset tiap awal bulan</p></div>
+          <div class="rounded-2xl border-2 border-line p-4"><p class="text-sm text-muted">Total generasi / job</p><p class="font-display text-2xl font-bold tabular-nums">{{ tokenUsage.total_generations }} video • {{ tokenUsage.total_jobs }} job</p><p class="text-xs text-muted">Total token sepanjang waktu: {{ tokenUsage.total_tokens?.toLocaleString('id-ID') }}</p></div>
+        </div>
+        <div v-if="tokenUsage?.daily?.length" class="mt-4">
+          <p class="text-sm font-bold">7 hari terakhir</p>
+          <div class="mt-2 flex gap-2 overflow-x-auto">
+            <div v-for="d in tokenUsage.daily" :key="d.date" class="min-w-[90px] rounded-xl border border-line p-2 text-center"><p class="text-xs text-muted">{{ d.date.slice(5) }}</p><p class="font-bold tabular-nums">{{ d.tokens?.toLocaleString('id-ID') }}</p><p class="text-[10px] text-muted">token</p></div>
+          </div>
+        </div>
+      </div>
+
+      <PageHeader title="Integrasi Muse" description="Kelola token API dan webhook untuk Muse langsung dari sini — tanpa mengedit file .env." />
 
         <div v-if="!cfg" class="grid grid-cols-1 gap-6 lg:grid-cols-2"><div v-for="i in 4" :key="i" class="skeleton h-48 rounded-3xl"></div></div>
         <template v-else>

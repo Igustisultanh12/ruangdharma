@@ -146,6 +146,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/muse-config/generate-webhook-secret', [MuseConfigController::class, 'generateWebhookSecret']);
         Route::put('/muse-config', [MuseConfigController::class, 'update']);
         Route::post('/muse-config/test', [MuseConfigController::class, 'test']);
+        Route::get('/muse-config/token-usage', [\App\Http\Controllers\Admin\MuseTokenUsageController::class, 'index']);
 
         // Roles & Permissions
         Route::get('/roles', [RoleController::class, 'index']);
