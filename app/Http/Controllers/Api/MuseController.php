@@ -73,17 +73,51 @@ class MuseController extends Controller
     }
     public function webhook(Request $request, MuseService $muse)
     {
-        // Sesuai docs/MUSE_INTEGRATION.md: X-Muse-Signature (HMAC-SHA256 body dgn MUSE_WEBHOOK_SECRET),
-        // header X-Muse-Webhook-Secret, ATAU X-Muse-Token (MUSE_API_TOKEN).
-        $authorized = $muse->verifyWebhookSignature($request->header('X-Muse-Signature'), $request->getContent())
-            || $muse->verifyWebhookSecret($request->header('X-Muse-Webhook-Secret'))
-            || $muse->verifyToken($request->header('X-Muse-Token'), $request->bearerToken());
-        if (!$authorized) return response()->json(['success' => false, 'message' => 'Unauthorized. Signature / token webhook tidak valid.'], 401);
+        if ($r = $this->checkMuseToken($request, $muse)) return $r;
         $data = $request->validate(['job_id' => 'required|integer|exists:muse_jobs,id', 'status' => 'required|in:completed,failed,processing', 'result' => 'sometimes|array', 'error' => 'sometimes|string']);
         $job = MuseJob::findOrFail($data['job_id']);
         if ($data['status'] === 'completed') $muse->completeJob($job, $data['result'] ?? []);
         elseif ($data['status'] === 'failed') $muse->failJob($job, $data['error'] ?? 'Gagal dari Muse');
-        else $muse->markProcessing($job);
+        else $job->markProcessing();
         return response()->json(['success' => true, 'ok' => true, 'job_id' => $job->id, 'status' => $job->fresh()->status]);
+    }
+    /**
+     * POST /api/muse/upload-video — Auto-upload video dari Muse, langsung bisa dibuka di web.
+     * Auth: X-Muse-Token. Body multipart: file (mp4/mov/webm, max 50MB), job_id (opsional, untuk link ke VideoGeneration),
+     * generation_id (opsional), keyword (opsional untuk nama file).
+     * Return: { success, video_url, file_path, size, job_id, generation_id }
+     * File disimpan di storage/app/public/videos/ dan dilayani via /storage/videos/... (butuh php artisan storage:link).
+     */
+    public function uploadVideo(Request $request, MuseService $muse)
+    {
+        if ($r = $this->checkMuseToken($request, $muse)) return $r;
+        $data = $request->validate([
+            'file' => 'required|file|mimes:mp4,mov,webm|max:51200',
+            'job_id' => 'sometimes|nullable|integer|exists:muse_jobs,id',
+            'generation_id' => 'sometimes|nullable|integer|exists:video_generations,id',
+            'keyword' => 'sometimes|nullable|string|max:100',
+        ], ['file.max' => 'File video maksimal 50MB.', 'file.mimes' => 'File harus video mp4/mov/webm.']);
+        $file = $request->file('file');
+        $keyword = $data['keyword'] ?? null;
+        $jobId = $data['job_id'] ?? null;
+        if ($jobId && !$keyword) { $j = MuseJob::find($jobId); $keyword = $j?->keyword; }
+        $slug = $keyword ? preg_replace('/[^a-z0-9]+/', '-', mb_strtolower($keyword)) : 'video';
+        $slug = trim($slug, '-') ?: 'video';
+        $filename = $slug . '-' . ($jobId ? "job{$jobId}-" : '') . time() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('videos', $filename, 'public');
+        $videoUrl = '/storage/' . $path;
+        $fullUrl = rtrim(config('app.url'), '/') . $videoUrl;
+        // Link ke VideoGeneration jika ada job_id / generation_id — update video_url agar langsung bisa di-play di Riwayat.
+        $generation = null;
+        if (!empty($data['generation_id'])) $generation = \App\Models\VideoGeneration::find($data['generation_id']);
+        elseif ($jobId) $generation = \App\Models\VideoGeneration::where('muse_job_id', $jobId)->first();
+        if ($generation) {
+            $generation->update(['video_url' => $fullUrl, 'video_files' => array_values(array_unique(array_merge((array) ($generation->video_files ?? []), [$filename])))]);
+        }
+        // Simpan juga ke MediaAsset agar muncul di Media Library
+        try {
+            \App\Models\MediaAsset::create(['title' => ($keyword ? $keyword . ' — Video' : 'Video Muse') . ($jobId ? " (Job #{$jobId})" : ''), 'file_path' => $videoUrl, 'type' => 'video', 'tags' => ['muse', 'auto-upload'], 'user_id' => $generation?->user_id ?? MuseJob::find($jobId)?->user_id ?? 1, 'mime' => $file->getMimeType(), 'size' => $file->getSize()]);
+        } catch (\Throwable $e) { /* MediaAsset opsional, jangan gagalkan upload */ }
+        return response()->json(['success' => true, 'message' => 'Video berhasil di-upload ke web.', 'video_url' => $fullUrl, 'video_url_relative' => $videoUrl, 'file_path' => $path, 'filename' => $filename, 'size' => $file->getSize(), 'job_id' => $jobId, 'generation_id' => $generation?->id], 201);
     }
 }
