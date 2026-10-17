@@ -1,10 +1,13 @@
 <?php
 namespace App\Services;
 use App\Models\MuseJob;
+use App\Models\MuseProfile;
 use App\Models\Setting;
 use App\Models\VideoGeneration;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class MuseService
 {
@@ -33,6 +36,181 @@ class MuseService
         if (static::usableSecret(config('services.muse.token'))) return 'env';
         return 'none';
     }
+
+    // ---------- Multi-profil Muse ----------
+    public static function profilesTableExists(): bool
+    {
+        try { return Schema::hasTable('muse_profiles'); } catch (\Throwable) { return false; }
+    }
+
+    /**
+     * Fallback token lama: jika tabel muse_profiles masih kosong tapi settings/.env
+     * punya token lama, buat profil "Muse Utama" dari token tersebut (didekripsi dulu,
+     * lalu disimpan terenkripsi lewat cast 'encrypted'). Konektor lama tetap jalan
+     * karena tokennya sama. Dipanggil saat daftar profil / job baru diminta —
+     * bukan lewat artisan tinker. Jika sudah ada profil, pastikan satu default.
+     */
+    public function ensureLegacyProfile(): ?MuseProfile
+    {
+        try {
+            if (! static::profilesTableExists()) return null;
+            $existing = MuseProfile::query()->first();
+            if ($existing) {
+                if (! MuseProfile::where('is_default', true)->exists()) {
+                    $oldest = MuseProfile::where('is_active', true)->orderBy('id')->first() ?? $existing;
+                    $oldest->update(['is_default' => true]);
+                }
+                return MuseProfile::where('is_default', true)->first();
+            }
+            $token = $this->getApiToken();
+            if (! $token) return null;
+            return MuseProfile::create([
+                'name' => 'Muse Utama',
+                'slug' => 'muse-utama',
+                'api_token' => $token,
+                'webhook_secret' => $this->getWebhookSecret(),
+                'description' => 'Profil otomatis dari token Muse lama (settings).',
+                'is_active' => true,
+                'is_default' => true,
+            ]);
+        } catch (\Throwable) { return null; }
+    }
+
+    public function defaultProfile(): ?MuseProfile
+    {
+        $this->ensureLegacyProfile();
+        try {
+            if (! static::profilesTableExists()) return null;
+            return MuseProfile::where('is_default', true)->first();
+        } catch (\Throwable) { return null; }
+    }
+
+    /** Cari profil AKTIF berdasarkan token (perbandingan hash_equals, tanpa log token). */
+    public function findProfileByToken(?string $given): ?MuseProfile
+    {
+        if (! $given || ! static::profilesTableExists()) return null;
+        try {
+            foreach (MuseProfile::where('is_active', true)->get() as $profile) {
+                try { $expected = $profile->api_token; } catch (\Throwable) { continue; }
+                if ($expected && hash_equals($expected, $given)) return $profile;
+            }
+        } catch (\Throwable) { return null; }
+        return null;
+    }
+
+    /** Cari profil AKTIF berdasarkan webhook secret. */
+    public function findProfileByWebhookSecret(?string $given): ?MuseProfile
+    {
+        if (! $given || ! static::profilesTableExists()) return null;
+        try {
+            foreach (MuseProfile::where('is_active', true)->get() as $profile) {
+                try { $expected = $profile->webhook_secret; } catch (\Throwable) { continue; }
+                if ($expected && hash_equals($expected, $given)) return $profile;
+            }
+        } catch (\Throwable) { return null; }
+        return null;
+    }
+
+    /** Cari profil AKTIF berdasarkan HMAC signature (X-Muse-Signature). */
+    public function findProfileBySignature(?string $signature, string $rawBody): ?MuseProfile
+    {
+        if (! $signature || ! static::profilesTableExists()) return null;
+        $signature = preg_replace('/^sha256=/i', '', trim($signature));
+        try {
+            foreach (MuseProfile::where('is_active', true)->get() as $profile) {
+                try { $secret = $profile->webhook_secret; } catch (\Throwable) { continue; }
+                if ($secret && hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature)) return $profile;
+            }
+        } catch (\Throwable) { return null; }
+        return null;
+    }
+
+    protected function legacyTokenMatches(?string $given): bool
+    {
+        if (! $given) return false;
+        foreach ([$this->getApiToken(), static::usableSecret(config('services.muse.token'))] as $expected) {
+            if ($expected && hash_equals($expected, $given)) return true;
+        }
+        return false;
+    }
+
+    protected function legacySecretMatches(?string $given): bool
+    {
+        if (! $given) return false;
+        foreach ([$this->getWebhookSecret(), static::usableSecret(config('services.muse.webhook_secret'))] as $expected) {
+            if ($expected && hash_equals($expected, $given)) return true;
+        }
+        return false;
+    }
+
+    protected function legacySignatureMatches(?string $signature, string $rawBody): bool
+    {
+        if (! $signature) return false;
+        $signature = preg_replace('/^sha256=/i', '', trim($signature));
+        foreach ([$this->getWebhookSecret(), static::usableSecret(config('services.muse.webhook_secret'))] as $secret) {
+            if ($secret && hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Resolusi kredensial token: profil yang cocok (diutamakan) atau token lama (legacy).
+     * @return array{authorized: bool, profile: ?MuseProfile, legacy: bool}
+     */
+    public function resolveTokenAuth(?string $headerToken, ?string $bearer): array
+    {
+        $given = $headerToken ?: $bearer;
+        if (! $given) return ['authorized' => false, 'profile' => null, 'legacy' => false];
+        if ($profile = $this->findProfileByToken($given)) return ['authorized' => true, 'profile' => $profile, 'legacy' => false];
+        if ($this->legacyTokenMatches($given)) return ['authorized' => true, 'profile' => null, 'legacy' => true];
+        return ['authorized' => false, 'profile' => null, 'legacy' => false];
+    }
+
+    /**
+     * Resolusi kredensial webhook: signature -> webhook secret -> token (OR, seperti sebelumnya).
+     * @return array{authorized: bool, profile: ?MuseProfile, legacy: bool}
+     */
+    public function resolveWebhookAuth(Request $request): array
+    {
+        $rawBody = $request->getContent();
+        if ($profile = $this->findProfileBySignature($request->header('X-Muse-Signature'), $rawBody)) return ['authorized' => true, 'profile' => $profile, 'legacy' => false];
+        if ($this->legacySignatureMatches($request->header('X-Muse-Signature'), $rawBody)) return ['authorized' => true, 'profile' => null, 'legacy' => true];
+        if ($profile = $this->findProfileByWebhookSecret($request->header('X-Muse-Webhook-Secret'))) return ['authorized' => true, 'profile' => $profile, 'legacy' => false];
+        if ($this->legacySecretMatches($request->header('X-Muse-Webhook-Secret'))) return ['authorized' => true, 'profile' => null, 'legacy' => true];
+        return $this->resolveTokenAuth($request->header('X-Muse-Token'), $request->bearerToken());
+    }
+
+    /**
+     * Kepemilikan job: job tanpa profil (job lama) boleh diselesaikan kredensial valid apa pun.
+     * Job berprofil hanya boleh diselesaikan token profil pemiliknya — KECUALI token lama
+     * (settings/.env) yang bertindak sebagai kredensial admin fallback agar konektor
+     * yang belum migrasi tetap bisa menyelesaikan job berprofil apa pun.
+     * Token profil lain DITOLAK.
+     */
+    public function profileMatchesJob(?MuseProfile $profile, bool $legacy, MuseJob $job): bool
+    {
+        if (empty($job->muse_profile_id)) return true;
+        if ($profile && (int) $profile->id === (int) $job->muse_profile_id) return true;
+        if ($legacy) return true;
+        return false;
+    }
+
+    /**
+     * Resolusi profil untuk job baru: id eksplisit (harus aktif) atau profil default.
+     * @return array{profile: ?MuseProfile, error: ?string}
+     */
+    public function resolveProfileForAssignment(?int $profileId): array
+    {
+        if ($profileId !== null) {
+            if (! static::profilesTableExists()) return ['profile' => null, 'error' => 'Profil Muse belum tersedia (migrasi muse_profiles belum dijalankan).'];
+            $profile = MuseProfile::find($profileId);
+            if (! $profile) return ['profile' => null, 'error' => 'Profil Muse tidak ditemukan.'];
+            if (! $profile->is_active) return ['profile' => null, 'error' => "Profil Muse \"{$profile->name}\" tidak aktif."];
+            return ['profile' => $profile, 'error' => null];
+        }
+        return ['profile' => $this->defaultProfile(), 'error' => null];
+    }
+
     public function testConnection(): array
     {
         $start = microtime(true);
@@ -46,11 +224,28 @@ class MuseService
     public function status(): array
     {
         $start = microtime(true);
-        return ['connected' => true, 'last_active' => now()->toIso8601String(), 'version' => '1.0.0', 'latency_ms' => (int) ((microtime(true) - $start) * 1000), 'queue_pending' => MuseJob::whereIn('status', ['queued', 'processing'])->count(), 'daily_generations' => VideoGeneration::whereDate('created_at', now()->toDateString())->count(), 'config_source' => $this->getConfigSource(), 'has_token' => (bool) $this->getApiToken(), 'has_webhook_secret' => (bool) $this->getWebhookSecret(), 'muse_base_url' => $this->getBaseUrl(), 'muse_timeout' => $this->getTimeout()];
+        $profilesTotal = 0; $profilesActive = 0;
+        try {
+            if (static::profilesTableExists()) {
+                $profilesTotal = MuseProfile::count();
+                $profilesActive = MuseProfile::where('is_active', true)->count();
+            }
+        } catch (\Throwable) { /* abaikan bila migrasi belum jalan */ }
+        return ['connected' => true, 'last_active' => now()->toIso8601String(), 'version' => '1.0.0', 'latency_ms' => (int) ((microtime(true) - $start) * 1000), 'queue_pending' => MuseJob::whereIn('status', ['queued', 'processing'])->count(), 'daily_generations' => VideoGeneration::whereDate('created_at', now()->toDateString())->count(), 'config_source' => $this->getConfigSource(), 'has_token' => (bool) $this->getApiToken(), 'has_webhook_secret' => (bool) $this->getWebhookSecret(), 'muse_base_url' => $this->getBaseUrl(), 'muse_timeout' => $this->getTimeout(), 'muse_profiles_total' => $profilesTotal, 'muse_profiles_active' => $profilesActive];
     }
-    public function createJob(?int $userId, string $keyword, int $durasi, string $model, ?string $callbackUrl = null): MuseJob
+    public function createJob(?int $userId, string $keyword, int $durasi, string $model, ?string $callbackUrl = null, ?int $museProfileId = null): MuseJob
     {
-        return MuseJob::create(['user_id' => $userId, 'keyword' => $keyword, 'durasi' => $durasi, 'model' => $model, 'status' => 'queued', 'callback_url' => $callbackUrl, 'source' => 'muse_api']);
+        $attrs = ['user_id' => $userId, 'keyword' => $keyword, 'durasi' => $durasi, 'model' => $model, 'status' => 'queued', 'callback_url' => $callbackUrl, 'source' => 'muse_api'];
+        // Tanpa muse_profile_id bila kolom belum ada (migrasi belum jalan) — job tetap dibuat.
+        $profileId = $museProfileId ?? $this->defaultProfile()?->id;
+        try {
+            if (Schema::hasColumn('muse_jobs', 'muse_profile_id')) $attrs['muse_profile_id'] = $profileId;
+        } catch (\Throwable) { /* abaikan */ }
+        $job = MuseJob::create($attrs);
+        if ($profileId) {
+            try { MuseProfile::where('id', $profileId)->update(['last_used_at' => now()]); } catch (\Throwable) { /* abaikan */ }
+        }
+        return $job;
     }
     public static function captionText($caption): ?string
     {
@@ -105,29 +300,17 @@ class MuseService
     }
     public function verifyToken(?string $headerToken, ?string $bearer): bool
     {
-        $given = $headerToken ?: $bearer;
-        if (!$given) return false;
-        foreach ([$this->getApiToken(), static::usableSecret(config('services.muse.token'))] as $expected) {
-            if ($expected && hash_equals($expected, $given)) return true;
-        }
-        return false;
+        return $this->resolveTokenAuth($headerToken, $bearer)['authorized'];
     }
     /** Verifikasi header X-Muse-Signature = HMAC-SHA256(raw body, MUSE_WEBHOOK_SECRET) (boleh berawalan "sha256="). */
     public function verifyWebhookSignature(?string $signature, string $rawBody): bool
     {
-        if (!$signature) return false;
-        $signature = preg_replace('/^sha256=/i', '', trim($signature));
-        foreach ([$this->getWebhookSecret(), static::usableSecret(config('services.muse.webhook_secret'))] as $secret) {
-            if ($secret && hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature)) return true;
-        }
-        return false;
+        if ($this->findProfileBySignature($signature, $rawBody)) return true;
+        return $this->legacySignatureMatches($signature, $rawBody);
     }
     public function verifyWebhookSecret(?string $given): bool
     {
-        if (!$given) return false;
-        foreach ([$this->getWebhookSecret(), static::usableSecret(config('services.muse.webhook_secret'))] as $expected) {
-            if ($expected && hash_equals($expected, $given)) return true;
-        }
-        return false;
+        if ($this->findProfileByWebhookSecret($given)) return true;
+        return $this->legacySecretMatches($given);
     }
 }

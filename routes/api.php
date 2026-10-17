@@ -7,6 +7,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\Api\MuseController;
 use App\Http\Controllers\Admin\MuseConfigController;
+use App\Http\Controllers\Admin\MuseProfileController;
 use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\CommentController;
@@ -84,6 +85,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/generations/{id}/versions/{versionId}/restore', [VideoGenerationController::class, 'restoreVersion']);
     Route::get('/quota', [VideoGenerationController::class, 'quota']);
 
+    // Profil Muse (multi-Muse) — daftar ringkas untuk dropdown Generate: tanpa token, hanya profil aktif.
+    Route::get('/muse-profiles', [MuseProfileController::class, 'options']);
+
     // Medsos — statistik & publish via Muse (IG/FB auto, TikTok manual)
     Route::get('/social/stats', [\App\Http\Controllers\SocialController::class, 'stats']);
     Route::get('/social/publishes', [\App\Http\Controllers\SocialController::class, 'publishes']);
@@ -155,6 +159,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/muse-config', [MuseConfigController::class, 'update']);
         Route::post('/muse-config/test', [MuseConfigController::class, 'test']);
         Route::get('/muse-config/token-usage', [\App\Http\Controllers\Admin\MuseTokenUsageController::class, 'index']);
+
+        // Profil Muse (multi-Muse) — CRUD admin. Semua respons hanya membawa token masked.
+        Route::get('/muse-profiles', [MuseProfileController::class, 'index']);
+        Route::post('/muse-profiles', [MuseProfileController::class, 'store']);
+        Route::post('/muse-profiles/{id}/generate-token', [MuseProfileController::class, 'generateToken']);
+        Route::post('/muse-profiles/{id}/generate-webhook-secret', [MuseProfileController::class, 'generateWebhookSecret']);
+        Route::put('/muse-profiles/{id}', [MuseProfileController::class, 'update']);
+        Route::post('/muse-profiles/{id}/set-default', [MuseProfileController::class, 'setDefault']);
+        Route::post('/muse-profiles/{id}/toggle-active', [MuseProfileController::class, 'toggleActive']);
+        Route::delete('/muse-profiles/{id}', [MuseProfileController::class, 'destroy']);
+        Route::post('/muse-profiles/{id}/test', [MuseProfileController::class, 'test']);
 
         // Roles & Permissions
         Route::get('/roles', [RoleController::class, 'index']);

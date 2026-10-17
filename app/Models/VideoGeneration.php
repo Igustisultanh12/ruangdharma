@@ -32,6 +32,9 @@ class VideoGeneration extends Model
     public function versions(): HasMany { return $this->hasMany(VideoGenerationVersion::class)->orderByDesc('version_number'); }
     public function comments(): HasMany { return $this->hasMany(Comment::class)->whereNull('parent_id')->latest(); }
 
+    /** Nama profil Muse yang mengerjakan video ini (via MuseJob). Tidak di-$appends agar tidak N+1 — controller yang membutuhkannya memanggil ->append('muse_profile_name') setelah eager-load museJob.museProfile. */
+    public function getMuseProfileNameAttribute(): ?string { return $this->museJob?->museProfile?->name; }
+
     public function scopeToday(Builder $q): Builder { return $q->whereDate('created_at', now()->toDateString()); }
     public function scopeByModel(Builder $q, string $model): Builder { return $q->where('model', $model); }
     public function scopeFavorites(Builder $q): Builder { return $q->where('is_favorite', true); }

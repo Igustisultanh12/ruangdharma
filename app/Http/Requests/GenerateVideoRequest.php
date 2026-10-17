@@ -13,6 +13,9 @@ class GenerateVideoRequest extends FormRequest
             'model' => 'required|string|in:narasi,ngobrol,gabungan',
             'via_muse' => 'sometimes|boolean',
             'async' => 'sometimes|boolean',
+            // Multi-Muse: profil Muse yang mengerjakan job (opsional; kosong = profil default).
+            // Keberadaan & status aktif dicek di controller via MuseService (bukan exists: agar tidak error sebelum migrasi jalan).
+            'muse_profile_id' => 'sometimes|nullable|integer',
             'backsound_url' => 'sometimes|nullable|string|max:2048',
             'backsound_volume' => 'sometimes|integer|min:0|max:100',
             'backsound_trim_start' => 'sometimes|integer|min:0',

@@ -23,10 +23,13 @@ class VideoGenerationController extends Controller
     /** Riwayat user + search/filter/sort/favorit/arsip + pagination. */
     public function index(Request $request)
     {
-        $q = $request->user()->videoGenerations()->with('user:id,name,email');
+        $q = $request->user()->videoGenerations()->with('user:id,name,email', 'museJob.museProfile');
         $q = static::applyFilters($q, $request);
 
-        return response()->json(['success' => true, 'data' => $q->paginate($this->perPage($request, 20))]);
+        $page = $q->paginate($this->perPage($request, 20));
+        $page->getCollection()->each(fn ($g) => $g->append('muse_profile_name'));
+
+        return response()->json(['success' => true, 'data' => $page]);
     }
 
     /** Ringkasan untuk tab Riwayat (jumlah semua / favorit / arsip). */
@@ -57,7 +60,13 @@ class VideoGenerationController extends Controller
         // Cara 2 — Generate via Muse (video beneran): buat MuseJob "queued" + VideoGeneration "waiting_muse".
         // Muse mengambil job lewat GET /api/muse/jobs/pending lalu mengirim hasil ke POST /api/muse/webhook.
         if ($request->boolean('via_muse') || $request->boolean('async')) {
-            $job = app(MuseService::class)->createJob($user->id, $keyword, (int) $data['durasi'], $data['model'], null);
+            // Multi-Muse: job bisa di-assign ke profil tertentu; kosong = profil default (atau fallback token lama).
+            $resolved = app(MuseService::class)->resolveProfileForAssignment(isset($data['muse_profile_id']) ? (int) $data['muse_profile_id'] : null);
+            if ($resolved['error']) {
+                return response()->json(['success' => false, 'message' => $resolved['error']], 422);
+            }
+            $profile = $resolved['profile'];
+            $job = app(MuseService::class)->createJob($user->id, $keyword, (int) $data['durasi'], $data['model'], null, $profile?->id);
             $g = VideoGeneration::create([
                 'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'],
                 'naskah' => [], 'caption' => 'Menunggu Muse — video sedang dibuat...', 'prompts' => [],
@@ -70,7 +79,9 @@ class VideoGenerationController extends Controller
 
             return response()->json([
                 'success' => true, 'message' => 'Job dikirim ke Muse. Video muncul otomatis setelah Muse selesai dan mengirim webhook.',
-                'generation' => $g->fresh(), 'muse_job_id' => $job->id, 'job_status' => 'queued', 'quota_remaining' => $quota->remaining($user),
+                'generation' => $g->fresh()->append('muse_profile_name'), 'muse_job_id' => $job->id, 'job_status' => 'queued',
+                'muse_profile_id' => $job->muse_profile_id, 'muse_profile_name' => $profile?->name,
+                'quota_remaining' => $quota->remaining($user),
             ], 201);
         }
 
@@ -95,7 +106,8 @@ class VideoGenerationController extends Controller
 
     public function show(Request $request, $id)
     {
-        $g = $this->findAccessible($request, $id)->load(['user:id,name,email,avatar', 'reviewer:id,name']);
+        $g = $this->findAccessible($request, $id)->load(['user:id,name,email,avatar', 'reviewer:id,name', 'museJob.museProfile']);
+        $g->append('muse_profile_name');
 
         return response()->json(['success' => true, 'data' => $g]);
     }
