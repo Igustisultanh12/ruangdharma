@@ -4,6 +4,7 @@ import api, { errorMessage } from '@/lib/api.js';
 import { toast } from '@/lib/toast.js';
 import Icon from '@/components/ui/Icon.vue';
 import Spinner from '@/components/ui/Spinner.vue';
+import TrimTimeline from '@/components/TrimTimeline.vue';
 
 const props = defineProps({ modelValue: { type: Object, default: () => ({ url: '', volume: 20, trimStart: 0, trimEnd: null }) } });
 const emit = defineEmits(['update:modelValue']);
@@ -35,16 +36,6 @@ function clampTrim() {
     if (local.value.trimEnd < local.value.trimStart) local.value.trimEnd = local.value.trimStart;
   }
   if (local.value.trimStart > effEnd.value) local.value.trimStart = effEnd.value;
-}
-function onTrimStartInput() { clampTrim(); sync(); }
-function onTrimEndInput() {
-  if (local.value.trimEnd != null && Number(local.value.trimEnd) >= duration.value) local.value.trimEnd = null;
-  clampTrim(); sync();
-}
-function onTrimEndSlider(e) {
-  const v = Number(e.target.value);
-  local.value.trimEnd = v >= duration.value ? null : v;
-  clampTrim(); sync();
 }
 function fileSizeLabel(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -117,19 +108,14 @@ onMounted(load);
     </div>
     <div class="space-y-2">
       <label class="text-sm">Volume: {{ local.volume }}%<input v-model.number="local.volume" type="range" min="0" max="100" class="w-full" @input="sync" /><span class="text-xs text-muted">20% = pelan di bawah narasi, 0 = tanpa backsound</span></label>
-      <!-- Timeline trim: geser slider, area terpilih di-highlight -->
-      <div>
-        <div class="flex justify-between text-xs text-muted"><span>Trim: {{ fmt(local.trimStart) }} — {{ fmt(effEnd) }} / {{ fmt(duration) }}</span><span>Geser slider untuk potong</span></div>
-        <div class="relative h-2 mt-1 rounded bg-black/10 overflow-hidden">
-          <div class="absolute top-0 bottom-0 bg-violet-500" :style="{ left: (local.trimStart / duration * 100) + '%', width: ((effEnd - local.trimStart) / duration * 100) + '%' }"></div>
-        </div>
-        <label class="text-sm block mt-2">Mulai dari (geser)<input :value="local.trimStart" type="range" min="0" :max="duration" step="0.5" class="w-full" @input="e => { local.trimStart = Number(e.target.value); onTrimStartInput(); }" /></label>
-        <label class="text-sm block mt-1">Sampai (geser, ujung = habis)<input :value="effEnd" type="range" min="0" :max="duration" step="0.5" class="w-full" @input="onTrimEndSlider" /></label>
-        <div class="grid grid-cols-2 gap-2 mt-1">
-          <label class="text-xs text-muted">Mulai (detik)<input v-model.number="local.trimStart" type="number" min="0" :max="duration" step="0.5" class="input mt-1" @change="onTrimStartInput" /></label>
-          <label class="text-xs text-muted">Sampai (detik, kosong = habis)<input v-model.number="local.trimEnd" type="number" min="0" :max="duration" step="0.5" placeholder="Kosong = habis" class="input mt-1" @change="onTrimEndInput" /></label>
-        </div>
-      </div>
+      <!-- Trim timeline ala CapCut: tarik handle kiri/kanan -->
+      <TrimTimeline
+        :duration="duration"
+        :start="local.trimStart ?? 0"
+        :end="local.trimEnd"
+        @update:start="(v) => { local.trimStart = v; clampTrim(); sync(); }"
+        @update:end="(v) => { local.trimEnd = v; clampTrim(); sync(); }"
+      />
     </div>
     <p class="text-xs text-muted">Di server, backsound dipotong / di-loop agar pas durasi video ({{ duration }} dtk), lalu dicampur di bawah suara narasi/dialog dengan ffmpeg: <code>volume={{ (local.volume/100).toFixed(2) }}</code>.</p>
   </div>

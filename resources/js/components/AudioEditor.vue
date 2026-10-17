@@ -4,6 +4,7 @@ import api, { errorMessage } from '@/lib/api.js';
 import { toast } from '@/lib/toast.js';
 import Icon from '@/components/ui/Icon.vue';
 import Spinner from '@/components/ui/Spinner.vue';
+import TrimTimeline from '@/components/TrimTimeline.vue';
 
 const props = defineProps({ generation: { type: Object, required: true } });
 const emit = defineEmits(['updated']);
@@ -21,33 +22,11 @@ const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a', 'ogg'];
 
 // Durasi acuan trim = durasi video (generation), fallback 60 detik.
 const maxDuration = computed(() => Number(props.generation.durasi ?? props.generation.duration ?? 60) || 60);
-const effEnd = computed(() => trimEnd.value ?? maxDuration.value);
 
 function fmt(s) {
   if (s == null || isNaN(s)) return '0:00';
   s = Math.max(0, Math.round(Number(s)));
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-}
-function clampTrim() {
-  if (trimStart.value < 0) trimStart.value = 0;
-  if (trimStart.value > maxDuration.value) trimStart.value = maxDuration.value;
-  if (trimEnd.value != null) {
-    if (trimEnd.value < 0) trimEnd.value = 0;
-    if (trimEnd.value > maxDuration.value) trimEnd.value = maxDuration.value;
-    if (trimEnd.value < trimStart.value) trimEnd.value = trimStart.value;
-  }
-  if (trimStart.value > effEnd.value) trimStart.value = effEnd.value;
-}
-function onTrimStartInput() { clampTrim(); }
-function onTrimEndInput() {
-  // Slider akhir: kalau digeser sampai durasi penuh, anggap habis (null).
-  if (trimEnd.value != null && Number(trimEnd.value) >= maxDuration.value) trimEnd.value = null;
-  clampTrim();
-}
-function onTrimEndSlider(e) {
-  const v = Number(e.target.value);
-  trimEnd.value = v >= maxDuration.value ? null : v;
-  clampTrim();
 }
 function fileSizeLabel(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -83,7 +62,9 @@ async function uploadAudio(e) {
 async function save() {
   saving.value = true;
   try {
-    const { data } = await api.put(`/generations/${props.generation.id}/backsound`, { backsound_url: backsoundUrl.value || null, backsound_volume: volume.value, backsound_trim_start: trimStart.value, backsound_trim_end: trimEnd.value });
+    // Konsistensi: kalau akhir == durasi penuh, kirim null (= habis).
+    const endToSend = (trimEnd.value != null && Number(trimEnd.value) >= maxDuration.value) ? null : trimEnd.value;
+    const { data } = await api.put(`/generations/${props.generation.id}/backsound`, { backsound_url: backsoundUrl.value || null, backsound_volume: volume.value, backsound_trim_start: trimStart.value, backsound_trim_end: endToSend });
     toast.success(data.message || 'Audio disimpan. Video akan di-mix ulang oleh Muse.');
     emit('updated');
   } catch (err) { toast.error(errorMessage(err)); } finally { saving.value = false; }
@@ -102,19 +83,14 @@ async function save() {
     <div v-if="backsoundUrl" class="text-xs text-muted break-all">Audio terpilih: {{ backsoundUrl }}</div>
     <div class="space-y-2">
       <label class="text-sm">Volume: {{ volume }}%<input v-model.number="volume" type="range" min="0" max="100" class="w-full" /><span class="text-xs text-muted">0 = bisu, 20 = pelan, 100 = keras</span></label>
-      <!-- Timeline trim: geser slider, area terpilih di-highlight -->
-      <div>
-        <div class="flex justify-between text-xs text-muted"><span>Trim: {{ fmt(trimStart) }} — {{ fmt(effEnd) }} / {{ fmt(maxDuration) }}</span><span>Geser slider untuk potong</span></div>
-        <div class="relative h-2 mt-1 rounded bg-black/10 overflow-hidden">
-          <div class="absolute top-0 bottom-0 bg-violet-500" :style="{ left: (trimStart / maxDuration * 100) + '%', width: ((effEnd - trimStart) / maxDuration * 100) + '%' }"></div>
-        </div>
-        <label class="text-sm block mt-2">Mulai (geser)<input :value="trimStart" type="range" min="0" :max="maxDuration" step="0.5" class="w-full" @input="e => { trimStart = Number(e.target.value); onTrimStartInput(); }" /></label>
-        <label class="text-sm block mt-1">Sampai (geser, ujung = habis)<input :value="effEnd" type="range" min="0" :max="maxDuration" step="0.5" class="w-full" @input="onTrimEndSlider" /></label>
-        <div class="grid grid-cols-2 gap-2 mt-1">
-          <label class="text-xs text-muted">Mulai (detik)<input v-model.number="trimStart" type="number" min="0" :max="maxDuration" step="0.5" class="input mt-1" @change="onTrimStartInput" /></label>
-          <label class="text-xs text-muted">Sampai (detik, kosong = habis)<input v-model.number="trimEnd" type="number" min="0" :max="maxDuration" step="0.5" placeholder="Kosong = habis" class="input mt-1" @change="onTrimEndInput" /></label>
-        </div>
-      </div>
+      <!-- Trim timeline ala CapCut: tarik handle kiri/kanan -->
+      <TrimTimeline
+        :duration="maxDuration"
+        :start="trimStart"
+        :end="trimEnd"
+        @update:start="(v) => { trimStart = v; }"
+        @update:end="(v) => { trimEnd = v; }"
+      />
     </div>
     <div class="flex gap-2">
       <button class="btn btn-primary btn-sm" :disabled="saving" @click="save"><Spinner v-if="saving" class="h-4 w-4" />Simpan & Mix Ulang</button>
