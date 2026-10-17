@@ -140,7 +140,7 @@ async function save() {
     // Payload API TIDAK berubah: trimStart/trimEnd = offset ke dalam file audio.
     const endToSend = (trimEnd.value != null && Number(trimEnd.value) >= trimDuration.value) ? null : trimEnd.value;
     const { data } = await api.put(`/generations/${props.generation.id}/backsound`, { backsound_url: backsoundUrl.value || null, backsound_volume: volume.value, backsound_trim_start: trimStart.value, backsound_trim_end: endToSend });
-    toast.success(data.message || 'Audio disimpan. Video akan di-mix ulang oleh Muse.');
+    toast.success(data.message || 'Audio disimpan. Server langsung mix audio ke video.');
     emit('updated');
   } catch (err) { toast.error(errorMessage(err)); } finally { saving.value = false; }
 }
@@ -176,6 +176,6 @@ async function save() {
       <button class="btn btn-ghost btn-sm" @click="volume = 0">Mute</button>
       <button class="btn btn-ghost btn-sm" @click="volume = 20; trimStart = 0; trimEnd = null">Reset</button>
     </div>
-    <p class="text-xs text-muted">Setelah Simpan, Muse akan mix ulang video dengan audio baru (volume {{ (volume/100).toFixed(2) }}, trim {{ trimStart }}s – {{ trimEnd ?? 'habis' }} — offset dalam file audio; server memotong/loop sesuai durasi video {{ fmt(videoDuration) }}). Halaman akan refresh otomatis.</p>
+    <p class="text-xs text-muted">Setelah Simpan, server langsung mix audio ke video (volume {{ (volume/100).toFixed(2) }}, trim {{ trimStart }}s – {{ trimEnd ?? 'habis' }} — offset dalam file audio; server memotong/loop sesuai durasi video {{ fmt(videoDuration) }}). Halaman akan refresh otomatis.</p>
   </div>
 </template>

@@ -298,10 +298,167 @@ class VideoGenerationController extends Controller
         ]);
         $g = $this->findEditable($request, $id);
         $g->update($data);
-        // Tandai perlu re-mix: buat job baru untuk Muse (status waiting_muse) agar auto-executor (cek tiap 1 detik) mengambil dan mix ulang.
-        // Simpan flag di generation: status tetap, tapi muse_job_id baru akan dibuat via webhook? Untuk sekarang, cukup update + notifikasi.
-        // Frontend akan polling dan menampilkan status.
-        return response()->json(['success' => true, 'message' => 'Audio disimpan. Muse akan mix ulang video dengan audio baru.', 'data' => $g->fresh()]);
+        $g = $g->fresh();
+
+        // Belum ada file video -> cukup simpan kolom, mix menyusul saat video dibuat.
+        if (empty($g->video_url)) {
+            return response()->json(['success' => true, 'message' => 'Backsound disimpan, akan dipakai saat video dibuat.', 'data' => $g]);
+        }
+
+        $volume = (int) ($g->backsound_volume ?? 20);
+        $backsoundUrl = $g->backsound_url;
+
+        // Backsound dihapus / dibisukan -> kembalikan ke video original (tanpa backsound) bila diketahui.
+        if (empty($backsoundUrl) || $volume === 0) {
+            $original = $this->originalVideoUrl($g);
+            if ($original && $original !== $g->video_url) {
+                $g->update(['video_url' => $original]);
+                ActivityLogger::fromRequest($request, 'backsound.remove', "Backsound dihapus, video kembali ke audio asli: {$g->keyword}", ['generation_id' => $g->id]);
+
+                return response()->json(['success' => true, 'message' => 'Backsound dihapus, video kembali ke audio asli.', 'data' => $g->fresh()]);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Backsound disimpan.', 'data' => $g]);
+        }
+
+        // Mix nyata di server dengan ffmpeg (jangan mengandalkan Muse).
+        // Sumber video SELALU dari original (bukan dari hasil mix sebelumnya),
+        // agar backsound tidak menumpuk / mengeras setiap kali Simpan ditekan.
+        $sourceUrl = $this->originalVideoUrl($g) ?? $g->video_url;
+        $videoPath = $this->storageLocalPath($sourceUrl);
+        $audioPath = $this->storageLocalPath($backsoundUrl);
+        if (! $videoPath || ! file_exists($videoPath)) {
+            ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, file video asli tidak ditemukan: {$g->keyword}", ['generation_id' => $g->id]);
+
+            return response()->json(['success' => false, 'message' => 'Mix gagal: file video asli tidak ditemukan di server. Kolom backsound tetap tersimpan, silakan coba lagi.'], 500);
+        }
+        if (! $audioPath || ! file_exists($audioPath)) {
+            ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, file backsound tidak ditemukan: {$g->keyword}", ['generation_id' => $g->id]);
+
+            return response()->json(['success' => false, 'message' => 'Mix gagal: file backsound tidak ditemukan di server. Kolom backsound tetap tersimpan, silakan coba lagi.'], 500);
+        }
+        $ffmpeg = trim((string) shell_exec('which ffmpeg 2>/dev/null'));
+        if ($ffmpeg === '') {
+            ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal, ffmpeg tidak tersedia: {$g->keyword}", ['generation_id' => $g->id]);
+
+            return response()->json(['success' => false, 'message' => 'Mix gagal: ffmpeg tidak tersedia di server. Minta admin menginstal ffmpeg (which ffmpeg harus ada). Kolom backsound tetap tersimpan.'], 500);
+        }
+
+        $videoDur = $this->probeMediaDuration($videoPath);
+        $audioDur = $this->probeMediaDuration($audioPath);
+        $start = max(0, (float) ($g->backsound_trim_start ?? 0));
+        $end = $g->backsound_trim_end !== null ? (float) $g->backsound_trim_end : null;
+        if ($audioDur !== null && $start >= $audioDur) $start = 0;
+        if ($end !== null) {
+            if ($end <= $start) $end = $start + 0.5;
+            if ($audioDur !== null && $end > $audioDur) $end = $audioDur;
+        }
+        $vol = max(0, min(100, $volume)) / 100;
+
+        $slug = trim(preg_replace('/[^a-z0-9]+/', '-', mb_strtolower($g->keyword)), '-') ?: 'video';
+        $outRel = 'videos/' . $slug . '-mix-' . $g->id . '-' . time() . '.mp4';
+        $outFull = storage_path('app/public/' . $outRel);
+        if (! is_dir(dirname($outFull))) mkdir(dirname($outFull), 0755, true);
+
+        $hasAudio = $this->videoHasAudio($videoPath);
+        $startStr = rtrim(rtrim(number_format($start, 2, '.', ''), '0'), '.') ?: '0';
+        $volStr = rtrim(rtrim(number_format($vol, 4, '.', ''), '0'), '.') ?: '0';
+        if ($end !== null) {
+            $endStr = rtrim(rtrim(number_format($end, 2, '.', ''), '0'), '.') ?: '0';
+            $bg = "[1:a]atrim=start={$startStr}:end={$endStr},asetpts=PTS-STARTPTS,volume={$volStr},aloop=loop=-1:size=2e+09[bg]";
+        } else {
+            $bg = "[1:a]atrim=start={$startStr},asetpts=PTS-STARTPTS,volume={$volStr},aloop=loop=-1:size=2e+09[bg]";
+        }
+        if ($hasAudio) {
+            $filter = "[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo[orig];{$bg};[orig][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]";
+            $cmd = escapeshellarg($ffmpeg) . ' -y -i ' . escapeshellarg($videoPath) . ' -i ' . escapeshellarg($audioPath)
+                . ' -filter_complex ' . escapeshellarg($filter)
+                . ' -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 128k -movflags +faststart ' . escapeshellarg($outFull);
+        } else {
+            // Video tanpa track audio: backsound menjadi satu-satunya audio, dibatasi durasi video.
+            $filter = "{$bg};[bg]anull[aout]";
+            // aloop pada [bg] sudah menghasilkan stream bernama [bg]; anull meneruskannya ke [aout].
+            $cmd = escapeshellarg($ffmpeg) . ' -y -i ' . escapeshellarg($videoPath) . ' -i ' . escapeshellarg($audioPath)
+                . ' -filter_complex ' . escapeshellarg($filter)
+                . ' -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 128k -movflags +faststart';
+            if ($videoDur !== null && $videoDur > 0) $cmd .= ' -t ' . escapeshellarg((string) $videoDur);
+            $cmd .= ' ' . escapeshellarg($outFull);
+        }
+
+        $ffmpegOut = (string) shell_exec($cmd . ' 2>&1');
+        if (! file_exists($outFull) || filesize($outFull) <= 0) {
+            if (file_exists($outFull)) @unlink($outFull);
+            $detail = mb_substr(trim(preg_replace('/\s+/', ' ', $ffmpegOut)), -500);
+            ActivityLogger::fromRequest($request, 'backsound.mix_failed', "Mix gagal (ffmpeg): {$g->keyword} — {$detail}", ['generation_id' => $g->id]);
+
+            return response()->json(['success' => false, 'message' => 'Mix gagal: ffmpeg tidak bisa memproses file ini. Kolom backsound tetap tersimpan, silakan coba lagi. Detail: ' . $detail], 500);
+        }
+
+        $newUrl = '/storage/' . $outRel;
+        $files = array_values(array_unique(array_merge((array) ($g->video_files ?? []), [$sourceUrl, $newUrl])));
+        $g->update(['video_url' => $newUrl, 'video_files' => $files]);
+        ActivityLogger::fromRequest($request, 'backsound.mixed', "Backsound di-mix ke video: {$g->keyword} (volume {$volume}%, trim {$startStr}s – " . ($end !== null ? $endStr . 's' : 'habis') . ')', ['generation_id' => $g->id]);
+
+        return response()->json(['success' => true, 'message' => 'Audio berhasil di-mix ke video.', 'data' => $g->fresh(), 'video_url' => $newUrl]);
+    }
+
+    /**
+     * URL video ORIGINAL (tanpa backsound): entri video_files pertama yang
+     * bukan hasil mix (-mix-), atau video_url saat ini bila belum pernah di-mix.
+     * Return null bila original tidak dapat dipastikan (video_url saat ini sudah mix
+     * tapi tidak ada entri non-mix di video_files).
+     */
+    protected function originalVideoUrl(VideoGeneration $g): ?string
+    {
+        foreach ((array) ($g->video_files ?? []) as $f) {
+            if (is_string($f) && $f !== '' && ! str_contains($f, '-mix-')) return $f;
+        }
+        if (is_string($g->video_url) && $g->video_url !== '' && ! str_contains($g->video_url, '-mix-')) return $g->video_url;
+
+        return null;
+    }
+
+    /**
+     * Ubah video_url / backsound_url (/storage/... atau URL penuh) menjadi
+     * path lokal storage/app/public/... Return null bila tidak dapat dipetakan
+     * atau mengandung path traversal.
+     */
+    protected function storageLocalPath(?string $url): ?string
+    {
+        if (! $url) return null;
+        if (file_exists($url)) return $url;
+        $path = parse_url($url, PHP_URL_PATH) ?? $url;
+        $path = ltrim((string) $path, '/');
+        if (str_starts_with($path, 'storage/')) {
+            $rel = substr($path, strlen('storage/'));
+        } elseif (str_contains($path, '/storage/')) {
+            $rel = substr($path, strpos($path, '/storage/') + strlen('/storage/'));
+        } elseif (str_starts_with($path, 'videos/') || str_starts_with($path, 'backsounds/')) {
+            $rel = $path;
+        } else {
+            return null;
+        }
+        if ($rel === '' || str_contains($rel, '..')) return null;
+
+        return storage_path('app/public/' . $rel);
+    }
+
+    /** Durasi media (detik) via ffprobe, null bila gagal. */
+    protected function probeMediaDuration(string $path): ?float
+    {
+        $out = shell_exec('ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ' . escapeshellarg($path) . ' 2>/dev/null');
+        if ($out === null) return null;
+        $v = (float) trim($out);
+
+        return $v > 0 ? $v : null;
+    }
+
+    /** Apakah file video punya track audio? */
+    protected function videoHasAudio(string $path): bool
+    {
+        $out = shell_exec('ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 ' . escapeshellarg($path) . ' 2>/dev/null');
+
+        return $out !== null && trim((string) $out) !== '';
     }
 
     public function restoreVersion(Request $request, $id, $versionId, VersioningService $versioning)

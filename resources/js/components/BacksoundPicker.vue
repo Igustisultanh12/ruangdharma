@@ -152,6 +152,6 @@ onMounted(async () => {
         @update:end="(v) => { local.trimEnd = v; clampTrim(); sync(); }"
       />
     </div>
-    <p class="text-xs text-muted">Trim di atas memakai durasi AUDIO penuh ({{ duration }} dtk). Di server, backsound dipotong / di-loop agar pas durasi video, lalu dicampur di bawah suara narasi/dialog dengan ffmpeg: <code>volume={{ (local.volume/100).toFixed(2) }}</code>.</p>
+    <p class="text-xs text-muted">Trim di atas memakai durasi AUDIO penuh ({{ duration }} dtk). Setelah Simpan, server langsung mix audio ke video: backsound dipotong / di-loop agar pas durasi video, lalu dicampur di bawah suara narasi/dialog dengan ffmpeg: <code>volume={{ (local.volume/100).toFixed(2) }}</code>.</p>
   </div>
 </template>
