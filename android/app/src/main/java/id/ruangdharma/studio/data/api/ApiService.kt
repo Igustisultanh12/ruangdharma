@@ -8,8 +8,10 @@ import retrofit2.Response
 import retrofit2.http.*
 
 interface ApiService {
+    // Login: server mengirim {success, message, token, user} di level ATAS,
+    // BUKAN ApiWrapper<LoginResponse> (tidak ada field "data" wajib).
     @POST("login")
-    suspend fun login(@Body body: Map<String, String>): Response<ApiWrapper<LoginResponse>>
+    suspend fun login(@Body body: Map<String, String>): Response<LoginResponse>
 
     @POST("logout")
     suspend fun logout(): Response<ApiWrapper<JsonObject>>

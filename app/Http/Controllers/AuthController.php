@@ -52,9 +52,11 @@ class AuthController extends Controller
 
         RateLimiter::clear($key);
         Cache::forget('login_fails_ip:' . $request->ip());
-        $token = $user->createToken('web')->plainTextToken;
+        $payload = $this->userPayload($user);
         ActivityLogger::log($user, 'login', "Login berhasil: {$user->email}", $request);
-        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'user' => $this->userPayload($user), 'token' => $token]);
+        // "data" ditambahkan untuk klien yang mengharapkan wrapper (mis. app Android lama),
+        // TANPA menghapus field token/user level atas yang dipakai web.
+        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'user' => $payload, 'token' => $token, 'data' => ['user' => $payload, 'token' => $token]]);
     }
 
     /** Hanya admin yang bisa membuat user (route dilindungi auth + role:admin). */

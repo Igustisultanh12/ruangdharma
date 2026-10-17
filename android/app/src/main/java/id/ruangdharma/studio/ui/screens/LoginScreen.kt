@@ -27,6 +27,6 @@ fun LoginScreen(onLogin: (String, String) -> Unit, loading: Boolean, error: Stri
             if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Masuk")
         }
         Spacer(Modifier.height(8.dp))
-        Text("Demo: admin@ruangdharma.id / admin123", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Gunakan email & password akun web Ruang Dharma", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

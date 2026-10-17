@@ -9,6 +9,19 @@ data class ApiWrapper<T>(
 )
 
 data class LoginResponse(
+    @SerializedName("success") val success: Boolean = true,
+    @SerializedName("message") val message: String? = null,
+    // Server mengirim token & user di level ATAS (bukan di dalam "data").
+    // Field "data" dipertahankan sebagai fallback bila server mengirim wrapper.
+    @SerializedName("token") val token: String? = null,
+    @SerializedName("user") val user: User? = null,
+    @SerializedName("data") val data: LoginData? = null
+) {
+    fun resolvedToken(): String? = token ?: data?.token
+    fun resolvedUser(): User? = user ?: data?.user
+}
+
+data class LoginData(
     @SerializedName("token") val token: String? = null,
     @SerializedName("user") val user: User? = null
 )

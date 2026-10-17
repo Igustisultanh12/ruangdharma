@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import id.ruangdharma.studio.data.api.RetrofitClient
 import id.ruangdharma.studio.data.api.TokenStore
 import id.ruangdharma.studio.data.model.*
@@ -74,6 +75,33 @@ fun RuangDharmaApp() {
         scope.launch { try { tokenUsage = api.tokenUsage().body()?.data } catch (_: Exception) {} }
     }
 
+    // Ambil pesan error dari body server ({"message": ...} atau {"errors": {"email": [...]}}),
+    // fallback ke pesan per kode HTTP agar user tahu penyebabnya, bukan sekadar "cek email & password".
+    fun parseLoginError(code: Int, raw: String?): String {
+        if (!raw.isNullOrBlank()) {
+            try {
+                val json = JSONObject(raw)
+                val msg = json.optString("message").takeIf { it.isNotBlank() }
+                if (msg != null) return msg
+                val errors = json.optJSONObject("errors")
+                if (errors != null) {
+                    val keys = errors.keys()
+                    while (keys.hasNext()) {
+                        val arr = errors.optJSONArray(keys.next())
+                        if (arr != null && arr.length() > 0) return arr.optString(0)
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+        return when (code) {
+            429 -> "Terlalu banyak percobaan login. Coba lagi beberapa menit."
+            403 -> "Akun dinonaktifkan. Hubungi admin."
+            422 -> "Email atau password salah."
+            401 -> "Email atau password salah."
+            else -> "Login gagal (HTTP $code) — cek email & password."
+        }
+    }
+
     LaunchedEffect(token) {
         if (token != null) { loadGenerations(); loadSocial(); loadUsage() }
     }
@@ -86,12 +114,17 @@ fun RuangDharmaApp() {
                         loginLoading = true; loginError = null
                         try {
                             val r = api.login(mapOf("email" to email, "password" to pass))
-                            val t = r.body()?.data?.token
+                            val body = r.body()
+                            // Server mengirim token di level ATAS (body.token), bukan body.data.token.
+                            val t = body?.resolvedToken()
                             if (r.isSuccessful && t != null) {
                                 token = t
                                 TokenStore.save(context, t)
-                                user = r.body()?.data?.user
-                            } else loginError = "Login gagal — cek email & password."
+                                user = body?.resolvedUser()
+                            } else {
+                                val raw = try { r.errorBody()?.string() } catch (_: Exception) { null }
+                                loginError = parseLoginError(r.code(), raw)
+                            }
                         } catch (e: Exception) { loginError = e.message ?: "Login gagal" }
                         loginLoading = false
                     }
