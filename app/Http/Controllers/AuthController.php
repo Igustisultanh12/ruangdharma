@@ -52,6 +52,7 @@ class AuthController extends Controller
 
         RateLimiter::clear($key);
         Cache::forget('login_fails_ip:' . $request->ip());
+        $token = $user->createToken('web')->plainTextToken;
         $payload = $this->userPayload($user);
         ActivityLogger::log($user, 'login', "Login berhasil: {$user->email}", $request);
         // "data" ditambahkan untuk klien yang mengharapkan wrapper (mis. app Android lama),
