@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import Badge from '@/components/ui/Badge.vue';
 import Icon from '@/components/ui/Icon.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
@@ -85,6 +85,50 @@ const profilesLoading = ref(false);
 const showAddProfile = ref(false);
 const profileBusy = ref('');
 const profileTests = ref({});
+// ---------- Reveal token profil (tombol mata, auto-hide 30 detik) ----------
+// Nilai lengkap HANYA di state memori komponen ini — tidak pernah disimpan ke
+// localStorage/sessionStorage, tidak pernah ditulis ke console.
+const REVEAL_TTL_MS = 30000;
+const revealedProfiles = ref({}); // { [id]: { api_token, webhook_secret, remaining } }
+const revealTimeouts = new Map();
+const revealIntervals = new Map();
+function hideProfileSecrets(id) {
+    if (revealTimeouts.has(id)) { clearTimeout(revealTimeouts.get(id)); revealTimeouts.delete(id); }
+    if (revealIntervals.has(id)) { clearInterval(revealIntervals.get(id)); revealIntervals.delete(id); }
+    if (revealedProfiles.value[id]) {
+        const next = { ...revealedProfiles.value };
+        delete next[id];
+        revealedProfiles.value = next;
+    }
+}
+function hideAllProfileSecrets() {
+    [...revealTimeouts.keys()].forEach((id) => hideProfileSecrets(id));
+}
+onUnmounted(hideAllProfileSecrets);
+async function toggleRevealProfile(p) {
+    if (revealedProfiles.value[p.id]) { hideProfileSecrets(p.id); return; }
+    profileBusy.value = `reveal-${p.id}`;
+    try {
+        const { data } = await api.post(`/admin/muse-profiles/${p.id}/reveal`);
+        hideProfileSecrets(p.id);
+        revealedProfiles.value = {
+            ...revealedProfiles.value,
+            [p.id]: { api_token: data.data?.api_token || '', webhook_secret: data.data?.webhook_secret || '', remaining: 30 },
+        };
+        revealIntervals.set(p.id, setInterval(() => {
+            const cur = revealedProfiles.value[p.id];
+            if (!cur) return;
+            const remaining = cur.remaining - 1;
+            if (remaining <= 0) { hideProfileSecrets(p.id); return; }
+            revealedProfiles.value = { ...revealedProfiles.value, [p.id]: { ...cur, remaining } };
+        }, 1000));
+        revealTimeouts.set(p.id, setTimeout(() => hideProfileSecrets(p.id), REVEAL_TTL_MS));
+    } catch (e) {
+        toast.error(errorMessage(e));
+    } finally {
+        profileBusy.value = '';
+    }
+}
 const newProfile = reactive({ name: '', description: '' });
 async function loadProfiles() {
     profilesLoading.value = true;
@@ -131,6 +175,7 @@ async function profileAction(p, action) {
         } else {
             ({ data } = await api.post(`/admin/muse-profiles/${p.id}/${action}`));
         }
+        hideProfileSecrets(p.id);
         toast.success(data.message);
         await loadProfiles();
         await loadTokenUsage();
@@ -214,7 +259,7 @@ const curls = computed(() => [
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="font-display text-lg font-bold">Profil Muse</h2>
-                    <p class="mt-1 text-xs text-muted">Web bisa punya lebih dari 1 koneksi Muse. Tiap profil punya token & webhook secret sendiri; saat generate, pilih Muse mana yang mengerjakan job. <b>Jangan paste token di chat — token dibuat di sini.</b> Token utuh tidak pernah ditampilkan; yang terlihat hanya versi masked.</p>
+                    <p class="mt-1 text-xs text-muted">Web bisa punya lebih dari 1 koneksi Muse. Tiap profil punya token & webhook secret sendiri; saat generate, pilih Muse mana yang mengerjakan job. <b>Jangan paste token di chat — token dibuat di sini.</b> Token utuh hanya tampil 30 detik lewat tombol mata, lalu otomatis tersembunyi lagi.</p>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" @click="showAddProfile = !showAddProfile"><Icon name="plus" class="h-4 w-4" /> Tambah Profil</button>
             </div>
@@ -240,8 +285,22 @@ const curls = computed(() => [
                     </div>
                     <p v-if="p.description" class="mt-1 text-xs text-muted">{{ p.description }}</p>
                     <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                        <div class="rounded-xl bg-surface-2 px-3 py-2"><span class="font-bold">Token:</span> <code class="font-mono">{{ p.api_token_masked || '—' }}</code></div>
-                        <div class="rounded-xl bg-surface-2 px-3 py-2"><span class="font-bold">Webhook secret:</span> <code class="font-mono">{{ p.webhook_secret_masked || '—' }}</code></div>
+                        <div class="flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-2">
+                            <span class="font-bold">Token:</span>
+                            <code class="min-w-0 flex-1 truncate font-mono">{{ revealedProfiles[p.id]?.api_token || p.api_token_masked || '—' }}</code>
+                            <button type="button" class="btn btn-ghost btn-icon btn-sm shrink-0" :disabled="profileBusy === `reveal-${p.id}`" :title="revealedProfiles[p.id] ? 'Sembunyikan token' : 'Tampilkan token (auto-hide 30 detik)'" :aria-label="revealedProfiles[p.id] ? 'Sembunyikan token' : 'Tampilkan token'" @click="toggleRevealProfile(p)"><Icon :name="revealedProfiles[p.id] ? 'eye-off' : 'eye'" class="h-4 w-4" /></button>
+                            <button v-if="revealedProfiles[p.id]?.api_token" type="button" class="btn btn-secondary btn-sm shrink-0" @click="copyText(revealedProfiles[p.id].api_token, 'Token ' + p.name)"><Icon name="copy" class="h-4 w-4" /> Salin</button>
+                        </div>
+                        <div class="flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-2">
+                            <span class="font-bold">Webhook secret:</span>
+                            <code class="min-w-0 flex-1 truncate font-mono">{{ revealedProfiles[p.id]?.webhook_secret || p.webhook_secret_masked || '—' }}</code>
+                            <button type="button" class="btn btn-ghost btn-icon btn-sm shrink-0" :disabled="profileBusy === `reveal-${p.id}`" :title="revealedProfiles[p.id] ? 'Sembunyikan webhook secret' : 'Tampilkan webhook secret (auto-hide 30 detik)'" :aria-label="revealedProfiles[p.id] ? 'Sembunyikan webhook secret' : 'Tampilkan webhook secret'" @click="toggleRevealProfile(p)"><Icon :name="revealedProfiles[p.id] ? 'eye-off' : 'eye'" class="h-4 w-4" /></button>
+                            <button v-if="revealedProfiles[p.id]?.webhook_secret" type="button" class="btn btn-secondary btn-sm shrink-0" @click="copyText(revealedProfiles[p.id].webhook_secret, 'Webhook secret ' + p.name)"><Icon name="copy" class="h-4 w-4" /> Salin</button>
+                        </div>
+                    </div>
+                    <div v-if="revealedProfiles[p.id]" class="mt-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                        <p class="font-bold">Jangan bagikan / screenshot key ini. Hanya untuk menghubungkan Muse.</p>
+                        <p class="mt-1">Sembunyi otomatis dalam {{ revealedProfiles[p.id].remaining }} detik · <button type="button" class="font-bold underline" @click="hideProfileSecrets(p.id)">Sembunyikan sekarang</button></p>
                     </div>
                     <div v-if="profileTests[p.id]" class="mt-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
                         <p class="font-bold">Tes: {{ profileTests[p.id].message }}</p>

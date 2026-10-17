@@ -167,7 +167,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/muse-config/test', [MuseConfigController::class, 'test']);
         Route::get('/muse-config/token-usage', [\App\Http\Controllers\Admin\MuseTokenUsageController::class, 'index']);
 
-        // Profil Muse (multi-Muse) — CRUD admin. Semua respons hanya membawa token masked.
+        // Profil Muse (multi-Muse) — CRUD admin. Semua respons hanya membawa token masked, kecuali reveal (throttle, hanya admin, dicatat tanpa nilai).
         Route::get('/muse-profiles', [MuseProfileController::class, 'index']);
         Route::post('/muse-profiles', [MuseProfileController::class, 'store']);
         Route::post('/muse-profiles/{id}/generate-token', [MuseProfileController::class, 'generateToken']);
@@ -177,6 +177,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/muse-profiles/{id}/toggle-active', [MuseProfileController::class, 'toggleActive']);
         Route::delete('/muse-profiles/{id}', [MuseProfileController::class, 'destroy']);
         Route::post('/muse-profiles/{id}/test', [MuseProfileController::class, 'test']);
+        Route::post('/muse-profiles/{id}/reveal', [MuseProfileController::class, 'reveal'])->middleware('throttle:10,1');
 
         // Roles & Permissions
         Route::get('/roles', [RoleController::class, 'index']);

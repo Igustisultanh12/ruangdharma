@@ -10,8 +10,10 @@ use Illuminate\Support\Str;
 
 /**
  * Kelola profil Muse (multi-Muse) dari menu Admin.
- * KEAMANAN: tidak ada endpoint di sini yang mengembalikan token/secret utuh —
- * semua respons hanya membawa versi masked (**** + 4 karakter terakhir).
+ * KEAMANAN: semua respons hanya membawa versi masked (**** + 4 karakter terakhir),
+ * KECUALI endpoint reveal() yang sengaja mengembalikan token/secret utuh untuk SATU
+ * profil atas permintaan admin — endpoint itu dibatasi throttle + hanya admin +
+ * dicatat ke ActivityLogger TANPA nilai token/secret, dan frontend auto-hide 30 detik.
  * Token & secret baru dibuat dengan bin2hex(random_bytes(32)) dan langsung
  * disimpan terenkripsi (cast 'encrypted' di MuseProfile).
  * Token lama di settings tetap dipertahankan sebagai fallback (lihat MuseService).
@@ -147,6 +149,27 @@ class MuseProfileController extends Controller
             'jobs_count' => $profile->jobs_count,
             'last_used_at' => $profile->last_used_at?->toIso8601String(),
             'message' => 'Profil tersimpan dengan format token valid. Tes koneksi jaringan tidak dilakukan di sini.',
+        ]]);
+    }
+
+    /**
+     * Reveal token + webhook_secret UTUH untuk SATU profil (atas permintaan admin).
+     * Disengaja atas permintaan user (tombol mata di Admin -> Integrasi Muse).
+     * Pengaman: (a) hanya admin (route group role:admin,super_admin),
+     * (b) throttle 10x/menit per user (di route), (c) dicatat ke ActivityLogger
+     * TANPA nilai token/secret, (d) hanya profil ini yang dikembalikan — tidak
+     * pernah profil lain. Frontend wajib auto-hide 30 detik & tidak menyimpan
+     * nilai ini ke localStorage/sessionStorage.
+     */
+    public function reveal(Request $request, $id)
+    {
+        $profile = MuseProfile::findOrFail($id);
+        ActivityLogger::fromRequest($request, 'muse.profile.reveal', "Reveal token profil Muse {$profile->name}.");
+        return response()->json(['success' => true, 'data' => [
+            'id' => $profile->id,
+            'name' => $profile->name,
+            'api_token' => $profile->api_token,
+            'webhook_secret' => $profile->webhook_secret,
         ]]);
     }
 }
