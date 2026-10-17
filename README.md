@@ -792,3 +792,23 @@ Setelah menambah migration baru, jalankan `php artisan migrate --force`.
 - Semua respons JSON konsisten: `{success, message, data, ...}` (kecuali MuseConfig yang
   mempertahankan bentuk lama agar frontend Admin/MuseConfig.vue tetap jalan, dan
   `download-txt` yang mengembalikan `text/plain`).
+
+## Aplikasi Android Native
+
+Aplikasi native Kotlin + Jetpack Compose + Material 3 di folder `android/` (applicationId `id.ruangdharma.studio`, minSdk 24, targetSdk 34).
+
+Fitur: Login (Sanctum), Beranda/Feed ala Instagram, Buat Video (keyword, durasi, model, via Muse, backsound), Riwayat + Detail (video player, naskah, caption, Editor Audio, publish IG/FB/TikTok), Medsos (statistik + publish), Admin Muse (penggunaan token dari 22M + riwayat per video), Profil (kuota, logout). UI/UX ala Meta: bottom navigation, top bar Canang, feed card, dark mode, pull-to-refresh, shimmer loading.
+
+### Unduh APK
+Unduh dari **GitHub Releases**: https://github.com/Igustisultanh12/ruangdharma/releases/tag/v1.0.0 — file `RUANGDHARMA-1.0.0.apk` (+ `SHA256SUMS.txt` untuk verifikasi). Izinkan "Instal aplikasi tidak dikenal", lalu pasang & login dengan akun Ruang Dharma.
+
+### Build lokal
+```bash
+cd android
+./gradlew :app:assembleDebug   # APK debug
+./gradlew :app:assembleRelease # APK release (butuh keystore, lihat android/app/build.gradle.kts)
+./gradlew :app:bundleRelease   # AAB Play Store
+```
+
+### Rilis otomatis (CI)
+Workflow `.github/workflows/android-release.yml` (pola [kantor](https://github.com/Igustisultanh12/kantor.git)): setiap push ke `main` yang lulus build + unit test + lint, bila rilis `v<versionName>` belum ada, akan menerbitkan GitHub Release otomatis — **hanya bila APK ditandatangani kunci rilis tetap**. Isi secrets `RUANGDHARMA_KEYSTORE_BASE64`, `RUANGDHARMA_KEYSTORE_PASSWORD`, `RUANGDHARMA_KEY_ALIAS`, `RUANGDHARMA_KEY_PASSWORD` di Settings → Secrets. Tanpa secrets, CI mengunggah APK debug-signed sebagai artifact saja dan menolak publish Release (agar pengguna tidak perlu uninstall). Naikkan `versionName` di `android/app/build.gradle.kts` untuk rilis baru.
