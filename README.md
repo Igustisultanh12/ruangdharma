@@ -1,54 +1,79 @@
-# Ruang Dharma Studio — Laravel 11 + Vue 3 (Vite)
+# Ruang Dharma Studio — Laravel 11 + Vue 3 (Vite + Tailwind CSS 4)
 
-Web untuk generate **naskah, video & caption** untuk video Ruang Dharma (@ruangdharma_).
-User masukkan kata kunci (misal "Rwa Bhineda"), pilih durasi (30/60/90 detik) dan model (narasi / ngobrol / gabungan), tekan Generate, ada loading 5 tahap, hasil lengkap: naskah 6 bagian + prompt visual + caption Instagram + kuota berkurang.
+Studio web untuk membuat **naskah, prompt visual & caption** video cerita Hindu anak Ruang Dharma (@ruangdharma_).
+Ketik kata kunci (mis. "Rwa Bhineda"), pilih durasi (30/60/90 detik) dan gaya (narasi / ngobrol / gabungan), tekan **Buat video** —
+loader canang 5 kelopak menyala per tahap, lalu hasil lengkap tampil: naskah 6 bagian + estimasi detik per bagian, prompt visual 9:16,
+caption Instagram, pratinjau story 9:16 yang bisa diputar, dan kuota berkurang otomatis.
+
+## Yang baru di versi ini
+
+**UI/UX dirombak total** — gaya PT Kreatif Sky (gradien violet → fuchsia → oranye, aksen kuning "brutal", font Plus Jakarta Sans + Space Grotesk)
+di atas kerangka panel bersih ala SISFOPERS (sidebar berkelompok, kartu pengguna & kuota di bawah, breadcrumb, tabel rapi). Mode gelap, responsif
+sampai layar HP, pencarian menu cepat **Ctrl/⌘ + K**, toast & dialog konfirmasi sendiri, grafik SVG interaktif, drag & drop di kalender & media.
+
+**Semua menu realtime tanpa refresh.** Frontend memanggil `GET /api/realtime/pulse` tiap 4 detik (30 detik saat tab tidak aktif, langsung saat tab
+dibuka lagi). Server mengirim "stamp" per resource (video, review, notifikasi, pengguna, log, pengaturan, dll). Bila berubah, hanya halaman yang
+memakai data itu yang dimuat ulang diam-diam; notifikasi baru muncul sebagai toast, badge sidebar & kuota ikut berubah. Tidak butuh server
+WebSocket (Reverb/Pusher), jadi aman di aaPanel / shared hosting.
+
+**Semua fitur memakai API asli.** Versi lama banyak menyimpan favorit, arsip, versi, komentar, review, paket, API key, webhook, media, jadwal,
+role, notifikasi & log hanya di `localStorage` browser (hilang saat ganti perangkat). Sekarang semuanya tersimpan di database.
+
+### Error & kekurangan yang diperbaiki
+| Masalah | Dampak | Perbaikan |
+|---|---|---|
+| Migrasi `000005` & `000009` memakai `information_schema` | `php artisan migrate` **gagal di SQLite** (instalasi lokal default) | Pakai `Schema::getForeignKeys()` (portabel MySQL/MariaDB/SQLite/PostgreSQL) |
+| `created_at` tidak fillable di log, notifikasi, versi, webhook log, riwayat login | Semua tanggal tersimpan **NULL** | Model memakai `UPDATED_AT = null` sehingga `created_at` terisi otomatis |
+| `env()` dipanggil saat runtime (MuseService, MuseConfig) | Token dari `.env` **hilang setelah `config:cache`** | Dibaca lewat `config('services.muse.*')` |
+| Placeholder `MUSE_API_TOKEN=change-me-...` di `.env.example` | Siapa pun bisa memakai token contoh itu | Nilai kosong/placeholder diabaikan otomatis |
+| Middleware stateful Sanctum pada API berbasis token | Login bisa kena **419 CSRF mismatch** | Dihapus; API murni Bearer token |
+| Admin ubah role hanya mengubah kolom `role` | Admin yang diturunkan **tetap punya akses admin** lewat pivot | Role kolom + pivot selalu disinkronkan; tidak bisa menonaktifkan/menurunkan diri sendiri; user nonaktif langsung dipaksa logout |
+| Edit naskah memakai `validated()` dengan aturan wildcard | Kunci `suara`, `prompt_visual`, `bagian` **terbuang** saat menyimpan | Memakai input penuh + normalisasi |
+| Upload avatar via `PUT` multipart | PHP tidak membaca body → **avatar tidak tersimpan** | Tambah `POST /api/profile` (multipart) |
+| Komentar & detail video bisa diakses siapa saja | Kebocoran data antar pengguna | Hanya pemilik atau admin/editor |
+| Webhook Muse mengabaikan `MUSE_WEBHOOK_SECRET` | Tidak sesuai dokumentasi | Mendukung `X-Muse-Signature` (HMAC-SHA256), `X-Muse-Webhook-Secret`, atau `X-Muse-Token` |
+| Editor tidak punya halaman antrean review | Alur review tidak jalan untuk editor | `GET /api/review-queue` untuk admin/super admin/editor |
+| Guard frontend hanya mengenal role `admin`; `/me` disimpan salah (`{success,user}`) | Super admin tertolak, data user rusak setelah refresh | Router & store baru berbasis role dari server |
+| Durasi tidak memengaruhi naskah; kalimat gabungan tanpa titik | Naskah 30/60/90 detik sama panjang, teks "Ahimsa Merawat…" | 30 dtk diringkas, 90 dtk diperkaya, estimasi detik per bagian, penggabungan kalimat diperbaiki |
+| Pengaturan keamanan & template notifikasi tidak dipakai | Hanya tampilan | Panjang minimal password dipakai di validasi; logout otomatis setelah tidak aktif; template notifikasi dipakai saat kirim notifikasi |
+| Test memakai database utama & butuh `mockery` yang tidak terpasang | `phpunit` gagal / bisa menghapus data | `phpunit.xml` memaksa SQLite in-memory; `mockery/mockery` ditambahkan; 19 test baru (173 assertion) |
+| Grup query `groupBy('date')` alias | Rawan error di MySQL `ONLY_FULL_GROUP_BY` | Group by ekspresi `DATE(created_at)` |
+| Akun demo tampil di halaman login produksi | Risiko keamanan | Hanya tampil saat `APP_ENV=local` |
 
 ## Fitur
-- Login Sanctum, role `admin` & `pengguna`
-- Pengguna: edit profil, generate video, riwayat sendiri
-- Admin: dashboard statistik, daftar pengguna, riwayat semua, pengaturan limit & kata diblokir, pantau koneksi Muse
-- Generate: validasi limit harian (global + per-user) + kata diblokir, ScriptGeneratorService dengan knowledge base (Canang Sari aturan bunga, Tri Sandhya, Karma, dll), aturan wajib Om Swastyastu / Om Santi Santi Santi Om, tanpa kata roh/penunggu
+- Login token Sanctum, role `super_admin`, `admin`, `editor`, `pengguna`, `viewer` + role kustom & matriks izin
+- **Buat video** dengan template, kuota per paket / per user / global, kata kunci terblokir, aturan wajib Om Swastyastu / Om Santi Santi Santi Om
+- **Riwayat** (tabel / kartu, filter, favorit, arsip), **detail video**: pratinjau story 9:16, edit naskah + versi & pulihkan, prompt, caption, komentar, jadwal tayang, unduh .txt
+- **Alur review**: draf → menunggu review → perlu revisi / disetujui → terbit, dengan notifikasi ke pemilik & reviewer
+- **Kalender konten** (drag & drop untuk menjadwalkan), **Media** (drag & drop upload gambar/video), **Notifikasi**
+- **Admin**: ringkasan, analitik (7/14/30/90 hari, tabel & grafik, ekspor CSV), semua video (ekspor CSV / cetak PDF), pengguna, role & izin, paket kuota,
+  pengaturan (umum, generate otomatis, keamanan, template notifikasi), integrasi Muse (token & webhook secret terenkripsi), API key, webhook + log, log aktivitas, riwayat login
+- **Auto generate harian** `app:generate-daily` (scheduler)
 - Integrasi Muse: `GET /api/muse/status`, `POST /api/muse/generate`, `GET /api/muse/jobs/{id}`, `POST /api/muse/webhook`, `GET /api/muse/health`. Lihat `docs/MUSE_INTEGRATION.md`.
-
-## Daftar Modul Lengkap
-- **Generate Video** — kata kunci + durasi + model (narasi / ngobrol / gabungan), naskah 6 bagian + prompt visual + caption Instagram
-- **Template Library** — template naskah siap pakai (Tri Sandhya, Canang Sari, Karma, dll)
-- **Favorit** — tandai hasil generate sebagai favorit untuk dipakai lagi
-- **Review Queue (Admin)** — admin meninjau hasil generate: setujui, minta revisi, atau tolak beserta alasannya
-- **Versioning** — setiap edit naskah menyimpan versi baru; riwayat versi bisa dilihat & dipulihkan
-- **Komentar** — diskusi per hasil generate
-- **Media Library** — kelola aset media (gambar/video) yang dipakai di konten
-- **Kalender Konten (Content Calendar)** — jadwalkan konten per tanggal & jam tayang
-- **Analitik** — statistik generate, pengguna aktif, dan pemakaian kuota
-- **Paket / Quota Plans** — paket limit harian (misal Gratis / Pro) dan penugasan paket ke pengguna
-- **API Keys** — kunci API untuk integrasi eksternal (key hanya ditampilkan sekali saat dibuat)
-- **Webhooks** — webhook keluar ke URL eksternal + log pengiriman (Webhook Logs)
-- **Role & Permissions** — role admin/pengguna + permission per fitur
-- **Log** — Activity Logs (jejak aktivitas pengguna) & Login History (riwayat login)
-- **Notifikasi** — notifikasi dalam aplikasi untuk pengguna
-- **Auto Generate Harian** — command `app:generate-daily` + cron/scheduler, 3 video per hari dengan rotasi model
-- **Dark Mode** — tema gelap/terang, tersimpan di preferensi pengguna
-- **Ekspor** — ekspor riwayat generate (Excel/CSV)
-- **Pengaturan** — limit global, kata diblokir, tema auto-generate, konfigurasi Muse (token via Admin, tanpa edit .env)
 
 ## Akun Demo (Seeder)
 - Admin: `admin@ruangdharma.id` / `admin123`
 - Pengguna: `user@ruangdharma.id` / `user123`
 
-> ⚠️ Ganti password demo ini setelah deploy ke server produksi. Jangan pakai akun demo untuk data asli.
+> ⚠️ Ganti password demo ini setelah deploy ke server produksi. Tombol isi-otomatis akun demo hanya tampil saat `APP_ENV=local`.
 
 ## Install Lokal
+Butuh PHP 8.2+, Composer, Node.js **20+**.
 ```bash
 composer install
 cp .env.example .env
 php artisan key:generate
 touch database/database.sqlite
 php artisan migrate --seed
+php artisan storage:link
 npm install
-npm run dev
+npm run dev          # atau: npm run build
 php artisan serve
 # buka http://localhost:8000
 ```
+Jalankan test: `composer test` (atau `php artisan config:clear && vendor/bin/phpunit`). Test selalu memakai SQLite in-memory.
+
+> Catatan: `package-lock.json` sengaja dihapus karena dependency frontend berganti (Tailwind 4, Pinia 3, Vite 6). `npm install` pertama kali akan membuat lock file baru — silakan di-commit.
 
 ## Install di Server (VPS / Shared Hosting)
 ### VPS (Ubuntu + Nginx + PHP 8.2)
@@ -680,6 +705,7 @@ composer install --optimize-autoloader --no-dev
 php artisan migrate --force
 
 # 4. Rebuild frontend Vue (jika ada perubahan di resources/js)
+#    (sekali saja setelah update UI baru ini: rm -rf node_modules agar paket lama Tailwind 3 bersih)
 npm install
 npm run build
 
@@ -701,7 +727,9 @@ chmod -R 775 storage bootstrap/cache
 - `app/Services/ScriptGeneratorService.php` — generator naskah
 - `app/Services/MuseService.php` — integrasi Muse
 - `app/Services/QuotaService.php` — cek kuota
-- `resources/js/` — Vue 3 SPA (router + pinia)
+- `app/Http/Controllers/RealtimeController.php` — endpoint realtime pulse
+- `resources/js/` — Vue 3 SPA: `views/` (halaman), `components/` (UI, grafik, brand canang, layout), `stores/realtime.js` (polling realtime), `composables/useList.js` & `useRealtime.js`
+- `resources/css/app.css` — design tokens & komponen (Tailwind CSS 4)
 - `docs/MUSE_INTEGRATION.md` — dokumentasi API Muse
 
 ## Auto-Generate Harian & Cron aaPanel
@@ -735,6 +763,12 @@ Alternatif tanpa scheduler (langsung tiap hari jam 07:00):
 Setelah menambah migration baru, jalankan `php artisan migrate --force`.
 
 ## Endpoint Baru (ringkas)
+
+- `GET /api/realtime/pulse` — stamp perubahan per resource + notifikasi belum dibaca + kuota (dipakai semua menu agar realtime).
+- `GET /api/review-queue?status=review|revisi|approved|published|all` — antrean review (admin/super admin/editor).
+- `GET /api/generations/counts` — jumlah semua / favorit / arsip / review / revisi / terbit milik user.
+- `POST /api/profile` — update profil multipart (avatar).
+- `GET /api/app-info` — info publik halaman login.
 
 - `GET /api/templates` — katalog template/ide video.
 - `POST /api/generations/{id}/toggle-favorite`, `POST /toggle-archive` — favorit & arsip.

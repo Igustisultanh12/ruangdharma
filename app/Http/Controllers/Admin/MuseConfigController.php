@@ -25,11 +25,11 @@ class MuseConfigController extends Controller {
     }
     protected function currentToken(): ?string {
         $raw = Setting::getValue('muse_api_token');
-        return $this->decryptValue($raw) ?: (env('MUSE_API_TOKEN') ?: null);
+        return $this->decryptValue($raw) ?: MuseService::usableSecret(config('services.muse.token'));
     }
     protected function currentSecret(): ?string {
         $raw = Setting::getValue('muse_webhook_secret');
-        return $this->decryptValue($raw) ?: (env('MUSE_WEBHOOK_SECRET') ?: null);
+        return $this->decryptValue($raw) ?: MuseService::usableSecret(config('services.muse.webhook_secret'));
     }
 
     public function show(Request $request, MuseService $muse) { return $this->get($request, $muse); }
@@ -38,9 +38,9 @@ class MuseConfigController extends Controller {
         $token = $this->currentToken();
         $secret = $this->currentSecret();
         $dbToken = Setting::getValue('muse_api_token');
-        $source = $dbToken ? 'database' : (env('MUSE_API_TOKEN') ? 'env' : 'none');
-        $baseUrl = Setting::getValue('muse_base_url', env('MUSE_BASE_URL', ''));
-        $timeout = (int) (Setting::getValue('muse_timeout', (string) env('MUSE_TIMEOUT', 15)) ?: 15);
+        $source = $dbToken ? 'database' : (MuseService::usableSecret(config('services.muse.token')) ? 'env' : 'none');
+        $baseUrl = Setting::getValue('muse_base_url', config('services.muse.base_url', ''));
+        $timeout = (int) (Setting::getValue('muse_timeout', (string) config('services.muse.timeout', 15)) ?: 15);
         return response()->json([
             'has_token' => (bool) $token,
             'has_webhook_secret' => (bool) $secret,
@@ -93,8 +93,8 @@ class MuseConfigController extends Controller {
 
     public function test(Request $request, MuseService $muse) {
         $start = microtime(true);
-        $baseUrl = Setting::getValue('muse_base_url', env('MUSE_BASE_URL', ''));
-        $timeout = (int) (Setting::getValue('muse_timeout', (string) env('MUSE_TIMEOUT', 15)) ?: 15);
+        $baseUrl = Setting::getValue('muse_base_url', config('services.muse.base_url', ''));
+        $timeout = (int) (Setting::getValue('muse_timeout', (string) config('services.muse.timeout', 15)) ?: 15);
         // Jika MUSE_BASE_URL diisi, test ke sana; jika kosong, test internal (DB + status)
         if ($baseUrl) {
             try {

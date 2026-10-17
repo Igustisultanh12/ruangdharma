@@ -13,6 +13,6 @@ class MediaAsset extends Model
     public function scopeSearchByTag($q, ?string $tag)
     {
         if (!$tag) return $q;
-        return $q->where('tags', 'like', "%{$tag}%")->orWhere('title', 'like', "%{$tag}%");
+        return $q->where(fn ($w) => $w->where('tags', 'like', "%{$tag}%")->orWhere('title', 'like', "%{$tag}%"));
     }
 }

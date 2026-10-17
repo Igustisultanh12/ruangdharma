@@ -48,6 +48,7 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => ['Email atau password salah.']]);
         }
         if (!$user->is_active) return response()->json(['success' => false, 'message' => 'Akun dinonaktifkan. Hubungi admin.'], 403);
+        $user->loadMissing(['roles', 'quotaPlan']);
 
         RateLimiter::clear($key);
         Cache::forget('login_fails_ip:' . $request->ip());
@@ -95,6 +96,9 @@ class AuthController extends Controller
             'permissions' => $user->allPermissions(),
             'quota_plan' => $user->quotaPlan ? ['id' => $user->quotaPlan->id, 'name' => $user->quotaPlan->name, 'daily_limit' => $user->quotaPlan->daily_limit] : null,
             'quota' => ['limit' => $user->effectiveDailyLimit(), 'used_today' => $user->usedToday(), 'remaining' => $user->remainingQuotaToday()],
+            'is_admin' => $user->isAdmin(),
+            'is_reviewer' => $user->hasAnyRole(VideoGenerationController::REVIEWER_ROLES),
+            'created_at' => $user->created_at?->toIso8601String(),
         ];
     }
 }

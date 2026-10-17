@@ -1,69 +1,244 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-body { @apply bg-slate-100 text-slate-800 antialiased; }
+@source '../views';
+@source '../js';
 
-/* Buttons */
-.btn-primary { @apply inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-medium transition shadow-sm; }
-.btn-secondary { @apply inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-2 rounded-xl font-medium transition shadow-sm; }
-.btn-danger { @apply inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white px-4 py-2 rounded-xl font-medium transition shadow-sm; }
-.btn-gold { @apply inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-medium transition shadow-sm; }
-.btn-sm { @apply px-3 py-1.5 text-sm; }
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* Forms */
-.label { @apply block text-sm font-medium text-slate-700 mb-1; }
-.input { @apply w-full border border-slate-300 rounded-xl px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 disabled:bg-slate-100; }
-.input-sm { @apply px-2 py-1.5 text-sm; }
-select.input { @apply pr-8; }
+/* ==========================================================================
+   Ruang Dharma Studio — design tokens
+   Palet PT Kreatif Sky (violet → fuchsia → oranye, aksen kuning "brutal")
+   dipadukan dengan kerangka panel bersih ala SISFOPERS.
+   Warna kelopak canang: putih (timur), merah (selatan), kuning (barat),
+   biru (utara), rampai (tengah) — dipakai di logo & loader generate.
+   ========================================================================== */
+:root {
+    --c-surface: #fbf8ff;
+    --c-surface-2: #f3eeff;
+    --c-card: #ffffff;
+    --c-ink: #15101f;
+    --c-muted: #6b6480;
+    --c-line: #e9e3f5;
+    --c-shadow: #15101f;
+    --c-brand: #7c3aed;
+    color-scheme: light;
+}
 
-/* Cards & badges */
-.card { @apply bg-white rounded-2xl shadow p-5; }
-.card-hover { @apply hover:shadow-md transition; }
-.badge { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium; }
-.badge-success { @apply bg-emerald-100 text-emerald-700; }
-.badge-warning { @apply bg-amber-100 text-amber-700; }
-.badge-info { @apply bg-sky-100 text-sky-700; }
-.badge-danger { @apply bg-red-100 text-red-700; }
-.badge-violet { @apply bg-violet-100 text-violet-700; }
-.badge-slate { @apply bg-slate-100 text-slate-600; }
+.dark {
+    --c-surface: #0c0916;
+    --c-surface-2: #161127;
+    --c-card: #19132d;
+    --c-ink: #f5f1ff;
+    --c-muted: #a8a0c2;
+    --c-line: #2d2547;
+    --c-shadow: #000000;
+    --c-brand: #a78bfa;
+    color-scheme: dark;
+}
 
-/* Tables */
-.table { @apply w-full text-sm; }
-.table th { @apply text-left px-4 py-3 font-semibold text-slate-600 bg-slate-50 border-b border-slate-200 whitespace-nowrap; }
-.table td { @apply px-4 py-3 border-b border-slate-100 align-middle; }
-.table tr:last-child td { @apply border-b-0; }
-.table tbody tr { @apply hover:bg-slate-50/60; }
+@theme inline {
+    --color-surface: var(--c-surface);
+    --color-surface-2: var(--c-surface-2);
+    --color-card: var(--c-card);
+    --color-ink: var(--c-ink);
+    --color-muted: var(--c-muted);
+    --color-line: var(--c-line);
+    --color-brand: var(--c-brand);
+}
 
-/* Sidebar */
-.sidebar-link { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition; }
-.sidebar-link-active { @apply bg-violet-600 text-white shadow-md hover:bg-violet-600 hover:text-white; }
-.sidebar-section { @apply px-3 mt-5 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400; }
+@theme {
+    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-display: 'Space Grotesk', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 
-/* Misc */
-.alert-error { @apply bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3; }
-.alert-success { @apply bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3; }
-.alert-warning { @apply bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-xl px-4 py-3; }
-.chip { @apply px-3 py-1.5 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-full text-sm font-medium transition cursor-pointer; }
-.chip-active { @apply bg-violet-600 text-white hover:bg-violet-600; }
-.progress-track { @apply h-3 bg-slate-200 rounded-full overflow-hidden; }
-.progress-bar { @apply h-full bg-gradient-to-r from-violet-600 to-amber-500 rounded-full transition-all duration-500; }
+    --shadow-brutal-sm: 3px 3px 0 0 var(--c-shadow);
+    --shadow-brutal: 5px 5px 0 0 var(--c-shadow);
+    --shadow-brutal-lg: 8px 8px 0 0 var(--c-shadow);
+    --shadow-glow: 0 20px 60px -15px rgb(124 58 237 / 0.45);
 
-/* Dark mode (class .dark di <html>, dikelola stores/ui.js) */
-.dark body { @apply bg-slate-900 text-slate-100; }
-.dark .card { @apply bg-slate-800 text-slate-100 shadow-none border border-slate-700; }
-.dark .input { @apply bg-slate-800 border-slate-600 text-slate-100 placeholder:text-slate-400; }
-.dark .input:disabled { @apply bg-slate-700; }
-.dark .label { @apply text-slate-300; }
-.dark .btn-secondary { @apply bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-600; }
-.dark .badge-slate { @apply bg-slate-700 text-slate-200; }
-.dark .table th { @apply bg-slate-700/60 text-slate-300 border-slate-700; }
-.dark .table td { @apply border-slate-700; }
-.dark .table tbody tr { @apply hover:bg-slate-700/40; }
-.dark .chip { @apply bg-violet-900/60 text-violet-200 hover:bg-violet-900; }
-.dark .chip-active { @apply bg-violet-600 text-white; }
-.dark .alert-error { @apply bg-red-950/50 border-red-800 text-red-300; }
-.dark .alert-success { @apply bg-emerald-950/50 border-emerald-800 text-emerald-300; }
-.dark .alert-warning { @apply bg-amber-950/50 border-amber-800 text-amber-300; }
-.dark .progress-track { @apply bg-slate-700; }
+    --animate-float: float 7s ease-in-out infinite;
+    --animate-float-slow: float 11s ease-in-out infinite;
+    --animate-spin-slow: spin 14s linear infinite;
+    --animate-gradient: gradient-shift 8s ease infinite;
+    --animate-pop-in: pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-bounce-soft: bounce-soft 2.4s ease-in-out infinite;
+    --animate-wiggle: wiggle 0.6s ease-in-out;
+    --animate-shimmer: shimmer 1.6s linear infinite;
+    --animate-ping-slow: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
 
+@utility bg-brand-gradient {
+    background-image: linear-gradient(120deg, #7c3aed 0%, #c026d3 45%, #f97316 100%);
+    background-size: 200% 200%;
+}
+@utility dot-bg {
+    background-image: radial-gradient(rgb(255 255 255 / 0.55) 1px, transparent 1px);
+    background-size: 18px 18px;
+}
+
+@keyframes float {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    33% { transform: translate3d(14px, -22px, 0) rotate(4deg); }
+    66% { transform: translate3d(-12px, 12px, 0) rotate(-3deg); }
+}
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+@keyframes pop-in {
+    from { opacity: 0; transform: scale(0.85) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes bounce-soft {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+@keyframes wiggle {
+    0%, 100% { transform: rotate(0); }
+    25% { transform: rotate(-8deg); }
+    75% { transform: rotate(8deg); }
+}
+@keyframes shimmer {
+    from { background-position: -400px 0; }
+    to { background-position: 400px 0; }
+}
+@keyframes ripple {
+    to { transform: scale(4); opacity: 0; }
+}
+@keyframes petal-glow {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50% { filter: drop-shadow(0 0 10px rgb(250 204 21 / 0.8)); }
+}
+
+/* ========================================================================== */
+@layer base {
+    html {
+        -webkit-tap-highlight-color: transparent;
+        text-rendering: optimizeLegibility;
+    }
+    body {
+        background-color: var(--c-surface);
+        color: var(--c-ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3, h4, .font-display {
+        font-family: var(--font-display);
+        letter-spacing: -0.02em;
+    }
+    ::selection { background: #f0abfc; color: #15101f; }
+    :focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; border-radius: 8px; }
+    [v-cloak] { display: none !important; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--c-muted) 40%, transparent); border-radius: 999px; border: 2px solid var(--c-surface); }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* ========================================================================== */
+@layer components {
+    .text-gradient {
+        @apply bg-gradient-to-r from-violet-600 via-fuchsia-500 to-orange-400 bg-clip-text text-transparent;
+    }
+    .dark .text-gradient { @apply from-violet-400 via-fuchsia-400 to-orange-300; }
+
+    /* ---------- Tombol ---------- */
+    .btn {
+        @apply relative inline-flex select-none items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm font-bold transition-all duration-200 disabled:opacity-55;
+    }
+    .btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+    .btn-primary {
+        @apply bg-brand-gradient text-white shadow-[0_10px_30px_-10px_rgb(124_58_237/0.7)] hover:shadow-[0_14px_40px_-10px_rgb(192_38_211/0.75)];
+        animation: gradient-shift 6s ease infinite;
+    }
+    .btn-dark { @apply bg-ink text-surface hover:opacity-90; }
+    .btn-brutal { @apply border-2 border-ink bg-yellow-300 text-zinc-950 shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal; }
+    .btn-lime { @apply border-2 border-ink bg-lime-300 text-zinc-950 shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal; }
+    .btn-secondary { @apply border-2 border-line bg-card text-ink hover:border-violet-400 hover:text-violet-600 dark:hover:text-violet-300; }
+    .btn-ghost { @apply text-muted hover:bg-surface-2 hover:text-ink; }
+    .btn-danger { @apply bg-rose-500 text-white hover:bg-rose-600; }
+    .btn-success { @apply bg-emerald-500 text-white hover:bg-emerald-600; }
+    .btn-soft-danger { @apply text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10; }
+    .btn-sm { @apply rounded-xl px-3 py-1.5 text-xs; }
+    .btn-lg { @apply rounded-2xl px-6 py-3.5 text-base; }
+    .btn-icon { @apply h-10 w-10 rounded-xl p-0; }
+    .btn-icon.btn-sm { @apply h-8 w-8 rounded-lg p-0; }
+
+    .shine::after {
+        content: '';
+        position: absolute;
+        inset: -50% auto -50% -60%;
+        width: 40%;
+        transform: rotate(25deg) translateX(-150%);
+        background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+        transition: transform 0.7s ease;
+        pointer-events: none;
+    }
+    .shine:hover::after { transform: rotate(25deg) translateX(500%); }
+    .ripple-ink {
+        position: absolute; border-radius: 999px; transform: scale(0); pointer-events: none;
+        background: currentColor; opacity: 0.25; animation: ripple 0.6s ease-out forwards;
+    }
+
+    /* ---------- Kartu ---------- */
+    .card { @apply rounded-3xl border border-line bg-card; }
+    .card-brutal { @apply rounded-3xl border-2 border-ink bg-card shadow-brutal; }
+    .card-lift { @apply transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-glow dark:hover:border-violet-500/40; }
+    .glass { @apply border border-white/30 bg-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-white/5; }
+
+    /* ---------- Form ---------- */
+    .label { @apply mb-1.5 block text-sm font-semibold text-ink; }
+    .input {
+        @apply w-full rounded-2xl border-2 border-line bg-card px-4 py-2.5 text-sm text-ink placeholder:text-muted/70 transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15 focus:outline-none disabled:opacity-60;
+    }
+    .input-sm { @apply rounded-xl px-3 py-2 text-sm; }
+    select.input {
+        @apply cursor-pointer appearance-none bg-no-repeat pr-10;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b80a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-position: right 0.9rem center;
+        background-size: 1rem;
+    }
+    textarea.input { @apply leading-relaxed; }
+    .input-error { @apply border-rose-400 focus:border-rose-500 focus:ring-rose-500/15; }
+    .field-error { @apply mt-1 text-xs font-semibold text-rose-500; }
+    .help { @apply mt-1 text-xs text-muted; }
+    .checkbox { @apply h-5 w-5 cursor-pointer rounded-md border-2 border-line accent-violet-600; }
+
+    /* ---------- Pilihan (chip / segmen) ---------- */
+    .chip { @apply inline-flex items-center gap-1.5 rounded-full border-2 border-line bg-card px-3 py-1.5 text-xs font-bold text-muted transition hover:border-violet-300 hover:text-ink; }
+    .chip-active { @apply border-ink bg-yellow-300 text-zinc-950 shadow-brutal-sm hover:text-zinc-950 dark:border-yellow-300; }
+    .segment { @apply inline-flex rounded-2xl border border-line bg-surface-2 p-1; }
+    .segment-item { @apply inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold text-muted transition hover:text-ink; }
+    .segment-item-active { @apply bg-card text-ink shadow-sm ring-1 ring-line; }
+
+    .eyebrow { @apply inline-flex items-center gap-2 rounded-full border-2 border-ink bg-yellow-300 px-3 py-1 text-xs font-extrabold tracking-wide text-zinc-900 shadow-brutal-sm; }
+
+    /* ---------- Tabel (gaya SISFOPERS) ---------- */
+    .table-wrap { @apply overflow-x-auto; }
+    .table { @apply w-full text-left text-sm; }
+    .table thead th { @apply whitespace-nowrap border-b border-line bg-surface-2/60 px-4 py-3 text-xs font-bold tracking-wide text-muted; }
+    .table tbody td { @apply border-b border-line/70 px-4 py-3 align-middle; }
+    .table tbody tr { @apply transition-colors hover:bg-surface-2/50; }
+    .table tbody tr:last-child td { @apply border-b-0; }
+
+    .skeleton {
+        @apply rounded-xl;
+        background: linear-gradient(90deg, var(--c-surface-2) 0px, color-mix(in oklab, var(--c-line) 70%, transparent) 40px, var(--c-surface-2) 80px);
+        background-size: 800px 100%;
+        animation: shimmer 1.6s linear infinite;
+    }
+    .kbd { @apply inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-line bg-surface-2 px-1 font-sans text-[10px] font-bold text-muted; }
+
+    .page-enter-active { transition: opacity 0.25s ease, transform 0.25s ease; }
+    .page-enter-from { opacity: 0; transform: translateY(8px); }
+    .petal-on { animation: petal-glow 1.2s ease-in-out infinite; }
+}

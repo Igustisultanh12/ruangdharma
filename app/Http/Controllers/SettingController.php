@@ -34,6 +34,17 @@ class SettingController extends Controller
         ];
     }
 
+    /** Info publik untuk halaman login (tanpa data sensitif). Akun demo hanya ditampilkan di APP_ENV=local. */
+    public function publicInfo()
+    {
+        return response()->json(['success' => true, 'data' => [
+            'app_name' => Setting::get('app_name', config('app.name')),
+            'app_description' => Setting::get('app_description', ''),
+            'app_logo' => Setting::get('app_logo', ''),
+            'show_demo_accounts' => app()->environment('local'),
+        ]]);
+    }
+
     public function index() { return response()->json(['success' => true, 'settings' => $this->allSettings()]); }
     public function getSettings() { return $this->index(); }
 

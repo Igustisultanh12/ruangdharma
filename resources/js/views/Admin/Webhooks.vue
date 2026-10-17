@@ -1,130 +1,158 @@
-<template>
-  <div>
-    <h1 class="text-2xl font-bold text-slate-900 dark:text-white mb-1">Webhooks</h1>
-    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Kirim event ke URL eksternal. Disimpan di perangkat ini sampai backend menyediakan endpoint webhooks. Tombol Test mencatat pengiriman simulasi ke Log Pengiriman.</p>
-
-    <div class="flex gap-1 bg-slate-200/70 dark:bg-slate-800 rounded-xl p-1 w-fit mb-4">
-      <button @click="tab = 'list'" class="px-4 py-2 rounded-lg text-sm font-medium" :class="tab === 'list' ? 'bg-white dark:bg-slate-700 shadow text-violet-700 dark:text-violet-300' : 'text-slate-600 dark:text-slate-300'">Daftar Webhook</button>
-      <button @click="tab = 'logs'" class="px-4 py-2 rounded-lg text-sm font-medium" :class="tab === 'logs' ? 'bg-white dark:bg-slate-700 shadow text-violet-700 dark:text-violet-300' : 'text-slate-600 dark:text-slate-300'">Log Pengiriman</button>
-    </div>
-
-    <div v-if="tab === 'list'">
-      <div class="card mb-4">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-3">{{ editing ? 'Edit Webhook' : 'Tambah Webhook' }}</h2>
-        <div class="grid md:grid-cols-2 gap-3">
-          <div><label class="label">URL Endpoint</label><input v-model="form.url" class="input" placeholder="https://contoh.com/webhook" /></div>
-          <div><label class="label">Nama</label><input v-model="form.name" class="input" placeholder="misal: Notifikasi Discord" /></div>
-        </div>
-        <div class="mt-3">
-          <label class="label">Events</label>
-          <div class="flex gap-4 flex-wrap">
-            <label v-for="e in EVENTS" :key="e" class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" :value="e" v-model="form.events" class="h-4 w-4 accent-violet-600" /> {{ e }}</label>
-          </div>
-        </div>
-        <label class="flex items-center gap-2 text-sm cursor-pointer mt-3"><input type="checkbox" v-model="form.active" class="h-4 w-4 accent-violet-600" /> Webhook aktif</label>
-        <div class="flex gap-2 mt-3">
-          <button @click="saveWebhook" class="btn-primary">Simpan Webhook</button>
-          <button @click="resetForm" class="btn-secondary">Atur Ulang</button>
-        </div>
-      </div>
-
-      <div class="card !p-0 overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead><tr><th>Nama / URL</th><th>Events</th><th>Status</th><th class="text-right">Aksi</th></tr></thead>
-            <tbody>
-              <tr v-for="w in hooks" :key="w.id">
-                <td><p class="font-medium">{{ w.name }}</p><p class="text-xs text-slate-400 break-all">{{ w.url }}</p></td>
-                <td><div class="flex gap-1 flex-wrap"><Badge v-for="e in w.events" :key="e" variant="violet">{{ e }}</Badge></div></td>
-                <td><Badge :variant="w.active ? 'success' : 'slate'">{{ w.active ? 'Aktif' : 'Nonaktif' }}</Badge></td>
-                <td class="text-right">
-                  <div class="flex gap-1.5 justify-end">
-                    <button @click="testWebhook(w)" class="btn-secondary btn-sm">Test</button>
-                    <button @click="openForm(w)" class="btn-secondary btn-sm">Edit</button>
-                    <button @click="removeHook(w)" class="btn-danger btn-sm">Hapus</button>
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="!hooks.length"><td colspan="4"><EmptyState title="Belum ada webhook" description="Tambahkan endpoint untuk menerima event studio." /></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="tab === 'logs'" class="card !p-0 overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead><tr><th>Waktu</th><th>Webhook</th><th>Event</th><th>Status</th><th>Respons</th></tr></thead>
-          <tbody>
-            <tr v-for="l in logs" :key="l.id">
-              <td class="whitespace-nowrap">{{ formatDate(l.created_at) }}</td>
-              <td class="max-w-56 truncate" :title="l.url">{{ l.name }}<p class="text-xs text-slate-400 truncate">{{ l.url }}</p></td>
-              <td><Badge variant="violet">{{ l.event }}</Badge></td>
-              <td><Badge :variant="l.status === 'success' ? 'success' : 'danger'">{{ l.status }}</Badge></td>
-              <td>{{ l.response }}</td>
-            </tr>
-            <tr v-if="!logs.length"><td colspan="5"><EmptyState title="Belum ada log pengiriman" description="Tekan Test pada webhook untuk mencatat pengiriman simulasi." /></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</template>
 <script setup>
-import { ref } from 'vue';
-import Swal from 'sweetalert2';
-import { useAuthStore } from '../../stores/auth.js';
-import { getWebhooks, saveWebhooks, getWebhookLogs, addWebhookLog } from '../../services/preferences.js';
-import { logActivity } from '../../services/activity.js';
-import Badge from '../../components/Badge.vue';
-import EmptyState from '../../components/EmptyState.vue';
+import { onMounted, reactive, ref } from 'vue';
+import Badge from '@/components/ui/Badge.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import Icon from '@/components/ui/Icon.vue';
+import Modal from '@/components/ui/Modal.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Spinner from '@/components/ui/Spinner.vue';
+import Toggle from '@/components/ui/Toggle.vue';
+import api, { errorMessage, fieldErrors } from '@/lib/api.js';
+import { dateTime, relative } from '@/lib/format.js';
+import { confirmDialog, toast } from '@/lib/toast.js';
+import { useRealtime } from '@/composables/useRealtime.js';
 
-const auth = useAuthStore();
-const EVENTS = ['generate.created', 'generate.completed', 'review.approved', 'user.created'];
-const hooks = ref(getWebhooks());
-const logs = ref(getWebhookLogs());
-const tab = ref('list');
-const form = ref({ id: null, name: '', url: '', events: [], active: true });
-const editing = ref(false);
+const EVENTS = [
+    { value: 'generation.completed', label: 'Video selesai dibuat' },
+    { value: 'generation.published', label: 'Video diterbitkan' },
+    { value: '*', label: 'Semua event' },
+];
+const hooks = ref([]);
+const loading = ref(true);
+const logsFor = ref(null);
+const logs = ref([]);
+async function load() {
+    try {
+        hooks.value = (await api.get('/webhooks')).data.data.data;
+        if (logsFor.value) openLogs(logsFor.value, true);
+    } finally {
+        loading.value = false;
+    }
+}
+onMounted(load);
+useRealtime(['webhooks'], load);
 
-function resetForm() {
-  form.value = { id: null, name: '', url: '', events: [], active: true };
-  editing.value = false;
+const modal = ref(false);
+const saving = ref(false);
+const errors = ref({});
+const form = reactive({ id: null, url: '', events: ['generation.completed'], is_active: true });
+function open(h = null) {
+    Object.assign(form, h ? { id: h.id, url: h.url, events: [...(h.events || [])], is_active: h.is_active } : { id: null, url: '', events: ['generation.completed'], is_active: true });
+    errors.value = {};
+    modal.value = true;
 }
-function openForm(w) {
-  form.value = { ...w, events: [...w.events] };
-  editing.value = true;
+function toggleEvent(v) {
+    const i = form.events.indexOf(v);
+    i >= 0 ? form.events.splice(i, 1) : form.events.push(v);
 }
-function saveWebhook() {
-  if (!form.value.url.trim() || !/^https?:\/\//.test(form.value.url.trim())) {
-    Swal.fire({ icon: 'error', title: 'URL tidak valid', text: 'Gunakan URL http(s) yang lengkap.' });
-    return;
-  }
-  if (!form.value.events.length) {
-    Swal.fire({ icon: 'error', title: 'Pilih minimal satu event' });
-    return;
-  }
-  if (form.value.id) hooks.value = hooks.value.map((h) => (h.id === form.value.id ? { ...form.value } : h));
-  else hooks.value.push({ ...form.value, id: Date.now() });
-  saveWebhooks(hooks.value);
-  logActivity({ action: 'update', description: `Simpan webhook ${form.value.name || form.value.url}`, user: auth.user });
-  Swal.fire({ icon: 'success', title: 'Webhook tersimpan', timer: 1200, showConfirmButton: false });
-  resetForm();
+async function save() {
+    saving.value = true;
+    errors.value = {};
+    try {
+        const payload = { url: form.url, events: form.events, is_active: form.is_active };
+        if (form.id) await api.put(`/webhooks/${form.id}`, payload);
+        else await api.post('/webhooks', payload);
+        toast.success(form.id ? 'Webhook diperbarui.' : 'Webhook dibuat.');
+        modal.value = false;
+        load();
+    } catch (e) {
+        errors.value = fieldErrors(e);
+        toast.error(errorMessage(e));
+    } finally {
+        saving.value = false;
+    }
 }
-async function removeHook(w) {
-  const res = await Swal.fire({ title: 'Hapus webhook?', text: w.url, icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626' });
-  if (!res.isConfirmed) return;
-  hooks.value = hooks.value.filter((x) => x.id !== w.id);
-  saveWebhooks(hooks.value);
+async function sendTest(h) {
+    try {
+        const { data } = await api.post(`/webhooks/${h.id}/test`);
+        const code = data.data?.status_code;
+        code >= 200 && code < 300 ? toast.success(`Tes terkirim · HTTP ${code}`) : toast.warning(`Tes terkirim tapi dijawab HTTP ${code || 'gagal'}: ${data.data?.response?.slice(0, 120) || ''}`);
+        load();
+    } catch (e) {
+        toast.error(errorMessage(e));
+    }
 }
-function testWebhook(w) {
-  // Simulasi: tidak melakukan fetch lintas domain (akan gagal CORS).
-  // Backend nantinya mengirim POST sungguhan ke URL webhook.
-  const event = w.events[0] || 'generate.created';
-  addWebhookLog({ name: w.name, url: w.url, event, status: 'success', response: 'Simulasi: payload contoh dicatat (pengiriman nyata menunggu endpoint backend).' });
-  logs.value = getWebhookLogs();
-  Swal.fire({ icon: 'success', title: 'Test dicatat', text: 'Pengiriman simulasi tersimpan di Log Pengiriman.', timer: 1600, showConfirmButton: false });
+async function remove(h) {
+    if (!(await confirmDialog({ title: 'Hapus webhook?', message: h.url, tone: 'danger', confirmText: 'Hapus' }))) return;
+    try {
+        await api.delete(`/webhooks/${h.id}`);
+        toast.success('Webhook dihapus.');
+        load();
+    } catch (e) {
+        toast.error(errorMessage(e));
+    }
 }
-function formatDate(iso) { try { return new Date(iso).toLocaleString('id-ID'); } catch { return iso; } }
+async function openLogs(h, silent = false) {
+    logsFor.value = h;
+    if (!silent) logs.value = [];
+    try {
+        logs.value = (await api.get(`/webhooks/${h.id}/logs`)).data.data.data;
+    } catch (e) {
+        toast.error(errorMessage(e));
+    }
+}
 </script>
+
+<template>
+    <div class="mx-auto max-w-5xl">
+        <PageHeader title="Webhook" description="Kirim kabar otomatis ke aplikasi lain (mis. Zapier, n8n) setiap ada video baru atau terbit.">
+            <template #actions><button type="button" class="btn btn-primary" @click="open()"><Icon name="plus" class="h-4 w-4" /> Webhook baru</button></template>
+        </PageHeader>
+
+        <div class="card overflow-hidden">
+            <div v-if="loading" class="space-y-3 p-6"><div v-for="i in 3" :key="i" class="skeleton h-14"></div></div>
+            <EmptyState v-else-if="!hooks.length" icon="webhook" title="Belum ada webhook" description="Tambahkan URL tujuan untuk menerima event dari studio." />
+            <ul v-else class="divide-y divide-line">
+                <li v-for="h in hooks" :key="h.id" class="flex flex-wrap items-center gap-4 px-5 py-4">
+                    <span :class="h.is_active ? 'bg-lime-300 border-ink text-zinc-900' : 'bg-surface-2 border-line text-muted'" class="grid h-10 w-10 place-items-center rounded-xl border-2"><Icon name="webhook" class="h-4 w-4" /></span>
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate font-mono text-sm font-bold">{{ h.url }}</p>
+                        <div class="mt-1 flex flex-wrap gap-1"><Badge v-for="e in h.events" :key="e" color="violet" size="xs">{{ e }}</Badge><span class="text-xs text-muted">· {{ h.logs_count }} pengiriman</span></div>
+                    </div>
+                    <div class="flex gap-1">
+                        <button type="button" class="btn btn-secondary btn-sm" @click="sendTest(h)"><Icon name="send-horizontal" class="h-4 w-4" /> Tes</button>
+                        <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label="Log" title="Log pengiriman" @click="openLogs(h)"><Icon name="scroll-text" class="h-4 w-4" /></button>
+                        <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label="Edit" @click="open(h)"><Icon name="pencil" class="h-4 w-4" /></button>
+                        <button type="button" class="btn btn-soft-danger btn-icon btn-sm" aria-label="Hapus" @click="remove(h)"><Icon name="trash-2" class="h-4 w-4" /></button>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <Modal :show="modal" :title="form.id ? 'Edit webhook' : 'Webhook baru'" size="md" @close="modal = false">
+            <form id="wh-form" class="space-y-4" @submit.prevent="save">
+                <div><label class="label" for="wh-url">URL tujuan</label><input id="wh-url" v-model="form.url" type="url" class="input font-mono" placeholder="https://contoh.com/webhook" required /><p v-if="errors.url" class="field-error">{{ errors.url }}</p></div>
+                <div>
+                    <p class="label">Event</p>
+                    <div class="space-y-2">
+                        <label v-for="e in EVENTS" :key="e.value" class="flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-line p-3 transition hover:border-violet-300">
+                            <input type="checkbox" class="checkbox" :checked="form.events.includes(e.value)" @change="toggleEvent(e.value)" />
+                            <span class="flex-1 text-sm font-semibold">{{ e.label }}</span>
+                            <code class="font-mono text-xs text-muted">{{ e.value }}</code>
+                        </label>
+                    </div>
+                    <p v-if="errors.events" class="field-error">{{ errors.events }}</p>
+                </div>
+                <div class="flex items-center justify-between rounded-2xl bg-surface-2 p-3"><span class="text-sm font-semibold">Aktif</span><Toggle v-model="form.is_active" label="Webhook aktif" /></div>
+            </form>
+            <template #footer>
+                <button type="button" class="btn btn-ghost" @click="modal = false">Batal</button>
+                <button type="submit" form="wh-form" class="btn btn-primary" :disabled="saving || !form.events.length"><Spinner v-if="saving" class="h-4 w-4" /><Icon v-else name="save" class="h-4 w-4" /> Simpan</button>
+            </template>
+        </Modal>
+
+        <Modal :show="!!logsFor" title="Log pengiriman" :subtitle="logsFor?.url" size="lg" @close="logsFor = null">
+            <ul v-if="logs.length" class="space-y-2">
+                <li v-for="l in logs" :key="l.id" class="rounded-2xl border border-line p-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Badge :color="l.status_code >= 200 && l.status_code < 300 ? 'emerald' : 'rose'" size="xs">HTTP {{ l.status_code || 'gagal' }}</Badge>
+                        <code class="font-mono text-xs">{{ l.event }}</code>
+                        <span class="ml-auto text-xs text-muted" :title="dateTime(l.created_at)">{{ relative(l.created_at) }}</span>
+                    </div>
+                    <pre v-if="l.response" class="mt-2 max-h-28 overflow-auto rounded-xl bg-surface-2 p-2 font-mono text-[11px] whitespace-pre-wrap">{{ l.response }}</pre>
+                </li>
+            </ul>
+            <EmptyState v-else compact icon="scroll-text" title="Belum ada pengiriman" description="Tekan Tes untuk mengirim contoh event." />
+        </Modal>
+    </div>
+</template>

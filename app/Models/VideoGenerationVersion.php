@@ -5,7 +5,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VideoGenerationVersion extends Model
 {
-    public $timestamps = false;
+    /** Hanya punya kolom created_at: biarkan Eloquent mengisinya otomatis (dulu selalu NULL karena tidak fillable). */
+    public const UPDATED_AT = null;
     protected $fillable = ['video_generation_id', 'version_number', 'naskah', 'caption', 'edited_by'];
     protected $casts = ['naskah' => 'array', 'created_at' => 'datetime'];
     public function generation(): BelongsTo { return $this->belongsTo(VideoGeneration::class, 'video_generation_id'); }

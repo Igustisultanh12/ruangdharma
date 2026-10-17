@@ -57,7 +57,12 @@ class MuseController extends Controller
     }
     public function webhook(Request $request, MuseService $muse)
     {
-        if ($r = $this->checkMuseToken($request, $muse)) return $r;
+        // Sesuai docs/MUSE_INTEGRATION.md: X-Muse-Signature (HMAC-SHA256 body dgn MUSE_WEBHOOK_SECRET),
+        // header X-Muse-Webhook-Secret, ATAU X-Muse-Token (MUSE_API_TOKEN).
+        $authorized = $muse->verifyWebhookSignature($request->header('X-Muse-Signature'), $request->getContent())
+            || $muse->verifyWebhookSecret($request->header('X-Muse-Webhook-Secret'))
+            || $muse->verifyToken($request->header('X-Muse-Token'), $request->bearerToken());
+        if (!$authorized) return response()->json(['success' => false, 'message' => 'Unauthorized. Signature / token webhook tidak valid.'], 401);
         $data = $request->validate(['job_id' => 'required|integer|exists:muse_jobs,id', 'status' => 'required|in:completed,failed,processing', 'result' => 'sometimes|array', 'error' => 'sometimes|string']);
         $job = MuseJob::findOrFail($data['job_id']);
         if ($data['status'] === 'completed') $muse->completeJob($job, $data['result'] ?? []);

@@ -1,63 +1,70 @@
 import { defineStore } from 'pinia';
-import api from '../services/api.js';
-import { logActivity, recordLogin } from '../services/activity.js';
+import api, { TOKEN_KEY, USER_KEY } from '@/lib/api.js';
+
+function readUser() {
+    try {
+        return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+    } catch {
+        return null;
+    }
+}
+
+export const REVIEWER_ROLES = ['admin', 'super_admin', 'editor'];
+export const ADMIN_ROLES = ['admin', 'super_admin'];
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({ user: null, token: null }),
-  getters: {
-    isAuthenticated: (s) => !!s.token && !!s.user,
-    isAdmin: (s) => s.user?.role === 'admin',
-    initials: (s) => {
-      const name = (s.user?.name || s.user?.email || '?').trim();
-      return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+    state: () => ({ user: readUser(), token: localStorage.getItem(TOKEN_KEY) }),
+    getters: {
+        isLoggedIn: (s) => !!s.token,
+        roles: (s) => [...new Set([s.user?.role, ...(s.user?.roles || [])].filter(Boolean))],
+        isAdmin() {
+            return this.user?.is_admin ?? this.roles.some((r) => ADMIN_ROLES.includes(r));
+        },
+        isReviewer() {
+            return this.user?.is_reviewer ?? this.roles.some((r) => REVIEWER_ROLES.includes(r));
+        },
+        firstName: (s) => (s.user?.name || '').split(' ')[0] || 'Kawan',
     },
-  },
-  actions: {
-    loadFromStorage() {
-      this.token = localStorage.getItem('token');
-      try {
-        this.user = JSON.parse(localStorage.getItem('user') || 'null');
-      } catch {
-        this.user = null;
-      }
+    actions: {
+        hasAnyRole(list = []) {
+            return !list.length || this.roles.some((r) => list.includes(r));
+        },
+        persist() {
+            if (this.token) localStorage.setItem(TOKEN_KEY, this.token);
+            else localStorage.removeItem(TOKEN_KEY);
+            if (this.user) localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+            else localStorage.removeItem(USER_KEY);
+        },
+        setUser(user) {
+            this.user = user;
+            this.persist();
+        },
+        async login(email, password) {
+            const { data } = await api.post('/login', { email, password });
+            this.token = data.token;
+            this.user = data.user;
+            this.persist();
+            return data;
+        },
+        async fetchMe() {
+            const { data } = await api.get('/me');
+            this.setUser(data.user);
+            return data.user;
+        },
+        async logout({ remote = true } = {}) {
+            if (remote && this.token) {
+                try {
+                    await api.post('/logout');
+                } catch {
+                    /* token mungkin sudah tidak berlaku */
+                }
+            }
+            this.clear();
+        },
+        clear() {
+            this.token = null;
+            this.user = null;
+            this.persist();
+        },
     },
-    persist() {
-      if (this.token) localStorage.setItem('token', this.token);
-      else localStorage.removeItem('token');
-      if (this.user) localStorage.setItem('user', JSON.stringify(this.user));
-      else localStorage.removeItem('user');
-    },
-    async login(email, password) {
-      try {
-        const { data } = await api.post('/login', { email, password });
-        this.user = data.user;
-        this.token = data.token;
-        this.persist();
-        recordLogin({ email, success: true });
-        logActivity({ action: 'login', description: `Masuk ke aplikasi (${email})`, user: data.user });
-        return data;
-      } catch (e) {
-        recordLogin({ email, success: false });
-        throw e;
-      }
-    },
-    async fetchUser() {
-      const { data } = await api.get('/me');
-      this.user = data;
-      this.persist();
-      return data;
-    },
-    async logout() {
-      const user = this.user;
-      try {
-        await api.post('/logout');
-      } catch (e) {
-        // Token mungkin sudah tidak valid; tetap bersihkan sesi lokal.
-      }
-      this.user = null;
-      this.token = null;
-      this.persist();
-      if (user) logActivity({ action: 'logout', description: `Keluar dari aplikasi (${user.email})`, user });
-    },
-  },
 });

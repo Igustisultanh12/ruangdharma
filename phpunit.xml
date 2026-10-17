@@ -1,1 +1,31 @@
-<?xml version="1.0" encoding="UTF-8"?><phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" bootstrap="vendor/autoload.php" colors="true"><testsuites><testsuite name="Feature"><directory suffix="Test.php">./tests/Feature</directory></testsuite></testsuites><php><env name="APP_ENV" value="testing"/></php></phpunit>
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true">
+    <testsuites>
+        <testsuite name="Feature">
+            <directory suffix="Test.php">./tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <!-- Test SELALU memakai SQLite in-memory: tidak pernah menyentuh database asli. -->
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=" force="true"/>
+        <env name="DB_CONNECTION" value="sqlite" force="true"/>
+        <env name="DB_DATABASE" value=":memory:" force="true"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <env name="MUSE_API_TOKEN" value="" force="true"/>
+        <env name="MUSE_WEBHOOK_SECRET" value="" force="true"/>
+        <env name="MUSE_BASE_URL" value="" force="true"/>
+    </php>
+</phpunit>

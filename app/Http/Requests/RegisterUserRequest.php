@@ -10,8 +10,8 @@ class RegisterUserRequest extends FormRequest
         return [
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email',
-            'password' => 'required|string|min:6|confirmed',
-            'role' => 'sometimes|string|in:super_admin,admin,editor,pengguna,viewer',
+            'password' => 'required|string|min:' . \App\Models\Setting::getInt('password_min_length', 6) . '|confirmed',
+            'role' => 'sometimes|string|exists:roles,name',
             'daily_limit' => 'sometimes|nullable|integer|min:0|max:100',
             'quota_plan_id' => 'sometimes|nullable|integer|exists:quota_plans,id',
         ];
@@ -23,7 +23,7 @@ class RegisterUserRequest extends FormRequest
             'email.required' => 'Email wajib diisi.',
             'email.unique' => 'Email sudah terdaftar.',
             'password.required' => 'Password wajib diisi.',
-            'password.min' => 'Password minimal 6 karakter.',
+            'password.min' => 'Password minimal :min karakter.',
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
         ];
     }

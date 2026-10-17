@@ -1,202 +1,251 @@
-<template>
-  <div>
-    <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Generate Video</h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400">Kata kunci + durasi + model menjadi naskah, caption & prompt visual.</p>
-      </div>
-      <RouterLink to="/templates" class="btn-secondary btn-sm">Lihat Template & Ide</RouterLink>
-    </div>
-
-    <div class="card mb-4">
-      <label class="label" for="gen-keyword">Kata kunci</label>
-      <input id="gen-keyword" v-model="keyword" class="input" placeholder="misal: Rwa Bhineda" />
-      <div class="flex flex-wrap gap-2 mt-2">
-        <button v-for="c in chips" :key="c" type="button" @click="keyword = c" class="chip" :class="{ 'chip-active': keyword === c }">{{ c }}</button>
-      </div>
-
-      <div class="grid md:grid-cols-2 gap-4 mt-5">
-        <fieldset>
-          <legend class="label">Durasi</legend>
-          <div class="flex gap-2">
-            <label v-for="d in [30, 60, 90]" :key="d" class="chip !cursor-pointer" :class="{ 'chip-active': durasi === d }">
-              <input type="radio" :value="d" v-model.number="durasi" class="sr-only" /> {{ d }} detik
-            </label>
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend class="label">Model</legend>
-          <div class="flex gap-2 flex-wrap">
-            <label v-for="m in modelOptions" :key="m.value" class="chip !cursor-pointer" :class="{ 'chip-active': model === m.value }">
-              <input type="radio" :value="m.value" v-model="model" class="sr-only" /> {{ m.label }}
-            </label>
-          </div>
-        </fieldset>
-      </div>
-
-      <p class="text-sm text-slate-500 dark:text-slate-400 mt-4">Sisa kuota: <b class="text-slate-900 dark:text-white">{{ store.quota.remaining }} / {{ store.quota.limit }}</b> video</p>
-      <button @click="doGenerate" :disabled="store.loading || !keyword.trim()" class="btn-primary mt-3 w-full">
-        <svg v-if="store.loading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" d="M12 3a9 9 0 109 9" /></svg>
-        {{ store.loading ? 'Sedang generate...' : 'Generate' }}
-      </button>
-
-      <div v-if="store.loading" class="mt-5">
-        <div class="flex justify-between text-sm mb-2"><span class="font-medium text-violet-700 dark:text-violet-300">{{ store.steps[store.step] }}...</span><span class="text-slate-500">{{ store.step + 1 }}/{{ store.steps.length }}</span></div>
-        <div class="progress-track"><div class="progress-bar" :style="{ width: ((store.step + 1) / store.steps.length * 100) + '%' }"></div></div>
-        <LoadingSteps :steps="store.steps" :current="store.step" class="mt-4" />
-      </div>
-
-      <div v-if="store.error" class="alert-error mt-4">
-        <p class="font-semibold">{{ errorTitle }}</p>
-        <p>{{ store.error }}</p>
-        <p v-if="store.errorKind === 'quota'" class="mt-1">Kuota akan terisi ulang besok, atau hubungi admin untuk menaikkan limit.</p>
-        <p v-if="store.errorKind === 'blocked'" class="mt-1">Kata kunci ini diblokir admin. Coba kata kunci lain dari Template & Ide.</p>
-      </div>
-    </div>
-
-    <div v-if="result" class="space-y-4">
-      <div class="card">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <div class="flex gap-1 bg-slate-100 dark:bg-slate-700 rounded-xl p-1">
-            <button v-for="t in tabs" :key="t.key" @click="tab = t.key" class="px-3 py-1.5 rounded-lg text-sm font-medium" :class="tab === t.key ? 'bg-white dark:bg-slate-800 shadow text-violet-700 dark:text-violet-300' : 'text-slate-600 dark:text-slate-300'">{{ t.label }}</button>
-          </div>
-          <div class="flex gap-2">
-            <button @click="copyText(resultText, 'Teks')" class="btn-secondary btn-sm">Salin</button>
-            <button @click="downloadTxt" class="btn-primary btn-sm">Unduh .txt</button>
-          </div>
-        </div>
-
-        <!-- Pratinjau 9:16 -->
-        <div v-if="tab === 'preview'">
-          <h2 class="font-bold text-lg text-slate-900 dark:text-white">{{ result.judul }}</h2>
-          <div class="aspect-[9/16] max-w-[320px] bg-slate-900 text-white rounded-2xl p-4 flex flex-col justify-between mx-auto my-3 shadow-lg">
-            <div>
-              <p class="text-xs opacity-70">BAGIAN {{ current + 1 }} / {{ result.naskah.length }}</p>
-              <p class="font-bold mt-2">{{ result.naskah[current]?.speaker }}</p>
-              <p class="text-sm mt-1">{{ result.naskah[current]?.teks }}</p>
-            </div>
-            <div class="flex gap-2">
-              <button @click="current = Math.max(0, current - 1)" class="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-sm font-medium">Sebelumnya</button>
-              <button @click="current = Math.min(result.naskah.length - 1, current + 1)" class="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-sm font-medium">Berikutnya</button>
-            </div>
-          </div>
-          <p class="text-sm text-slate-500 dark:text-slate-400 text-center">Pratinjau frame + subtitle. Video AI penuh dibuat lewat prompt di tab Prompt Visual / via Muse.</p>
-        </div>
-
-        <!-- Naskah -->
-        <div v-if="tab === 'naskah'">
-          <h2 class="font-bold text-lg text-slate-900 dark:text-white mb-2">Naskah ({{ result.naskah.length }} bagian)</h2>
-          <div v-for="n in result.naskah" :key="n.bagian" class="border-b border-slate-100 dark:border-slate-700 py-3 last:border-0">
-            <p class="font-semibold text-sm">Bagian {{ n.bagian }} — {{ n.speaker }} <span class="text-slate-400 font-normal">({{ n.suara }})</span></p>
-            <p class="text-sm mt-1">{{ n.teks }}</p>
-          </div>
-        </div>
-
-        <!-- Caption -->
-        <div v-if="tab === 'caption'">
-          <h2 class="font-bold text-lg text-slate-900 dark:text-white mb-2">Caption</h2>
-          <pre class="whitespace-pre-wrap text-sm bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">{{ result.caption }}</pre>
-          <button @click="copyText(result.caption, 'Caption')" class="btn-primary mt-3">Salin Caption</button>
-        </div>
-
-        <!-- Prompt Visual -->
-        <div v-if="tab === 'prompts'">
-          <h2 class="font-bold text-lg text-slate-900 dark:text-white mb-2">Prompt Visual</h2>
-          <ol class="space-y-2">
-            <li v-for="(p, i) in result.prompts" :key="i" class="text-sm bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3"><b>Bagian {{ i + 1 }}:</b> {{ p }}</li>
-          </ol>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import Swal from 'sweetalert2';
-import { useGenerateStore } from '../stores/generate.js';
-import { useNotificationStore } from '../stores/notifications.js';
-import { useAuthStore } from '../stores/auth.js';
-import { getGenerateDefaults } from '../services/preferences.js';
-import { logActivity } from '../services/activity.js';
-import LoadingSteps from '../components/LoadingSteps.vue';
+import CanangLoader from '@/components/brand/CanangLoader.vue';
+import CanangMark from '@/components/brand/CanangMark.vue';
+import GenerationModal from '@/components/generation/GenerationModal.vue';
+import PhonePreview from '@/components/generation/PhonePreview.vue';
+import Badge from '@/components/ui/Badge.vue';
+import Icon from '@/components/ui/Icon.vue';
+import Segmented from '@/components/ui/Segmented.vue';
+import Spinner from '@/components/ui/Spinner.vue';
+import api, { errorMessage } from '@/lib/api.js';
+import { saveText } from '@/lib/download.js';
+import { DURATIONS, generationToText, MODELS, partText } from '@/lib/format.js';
+import { copyText, toast } from '@/lib/toast.js';
+import { useAuthStore } from '@/stores/auth.js';
+import { useRealtimeStore } from '@/stores/realtime.js';
 
-const store = useGenerateStore();
-const notif = useNotificationStore();
+const STEPS = ['Menyiapkan naskah', 'Menulis dialog & narasi', 'Membuat prompt visual 9:16', 'Menyusun caption Instagram', 'Menyiapkan video'];
+const SUGGESTIONS = ['Rwa Bhineda', 'Canang Sari', 'Tri Sandhya', 'Karma', 'Tri Hita Karana', 'Bhatara Sri', 'Ahimsa', 'Nyepi', 'Saraswati', 'Ngayah'];
+
 const auth = useAuthStore();
+const rt = useRealtimeStore();
 const route = useRoute();
 
-const keyword = ref('Rwa Bhineda');
-const durasi = ref(60);
-const model = ref('narasi');
-const current = ref(0);
-const tab = ref('preview');
-const chips = ['Rwa Bhineda', 'Canang Sari', 'Tri Sandhya', 'Karma', 'Tri Hita Karana', 'Bhatara Sri'];
-const modelOptions = [
-  { value: 'narasi', label: 'Narasi' },
-  { value: 'ngobrol', label: 'Ngobrol' },
-  { value: 'gabungan', label: 'Gabungan' },
-];
-const tabs = [
-  { key: 'preview', label: 'Pratinjau 9:16' },
-  { key: 'naskah', label: 'Naskah' },
-  { key: 'caption', label: 'Caption' },
-  { key: 'prompts', label: 'Prompt Visual' },
-];
+const keyword = ref('');
+const durasi = ref(auth.user?.default_durasi || 60);
+const model = ref(auth.user?.default_model || 'narasi');
+const loading = ref(false);
+const step = ref(0);
+const result = ref(null);
+const generation = ref(null);
+const error = ref(null); // { kind, message }
+const tab = ref('naskah');
+const detailId = ref(null);
+const sending = ref(false);
 
-const result = computed(() => store.result?.result || null);
-const errorTitle = computed(() => store.errorKind === 'quota' ? 'Kuota harian habis' : store.errorKind === 'blocked' ? 'Kata kunci diblokir' : 'Gagal generate');
-const resultText = computed(() => {
-  if (!result.value) return '';
-  const r = result.value;
-  let t = `RUANG DHARMA STUDIO\nJudul: ${r.judul}\nKata kunci: ${r.keyword} | Durasi: ${r.durasi} | Model: ${r.model}\n\n=== NASKAH ===\n`;
-  r.naskah.forEach((n) => { t += `\nBagian ${n.bagian} — ${n.speaker} (${n.suara})\n${n.teks}\nPrompt: ${r.prompts[n.bagian - 1]}\n`; });
-  t += `\n=== CAPTION ===\n${r.caption}\n`;
-  return t;
-});
+const quota = computed(() => rt.quota || { limit: auth.user?.quota?.limit ?? 0, used: auth.user?.quota?.used_today ?? 0, remaining: auth.user?.quota?.remaining ?? 0 });
+const outOfQuota = computed(() => rt.quota && rt.quota.remaining <= 0);
+const canGenerate = computed(() => keyword.value.trim().length > 1 && !loading.value && !outOfQuota.value);
 
 function applyQuery() {
-  const q = route.query;
-  // Prioritas: query (template / generate ulang / media / kalender) > default pengguna > bawaan.
-  const defaults = getGenerateDefaults();
-  if (q.keyword) keyword.value = String(q.keyword);
-  if (q.durasi && [30, 60, 90].includes(Number(q.durasi))) durasi.value = Number(q.durasi);
-  else if (!q.keyword && !q.durasi) durasi.value = defaults.durasi;
-  if (q.model && ['narasi', 'ngobrol', 'gabungan'].includes(String(q.model))) model.value = String(q.model);
-  else if (!q.keyword && !q.model) model.value = defaults.model;
-  if (q.media) keyword.value = String(q.keyword || q.media);
+    const q = route.query;
+    if (q.keyword) keyword.value = String(q.keyword).slice(0, 100);
+    if (DURATIONS.includes(Number(q.durasi))) durasi.value = Number(q.durasi);
+    if (MODELS.some((m) => m.value === q.model)) model.value = String(q.model);
 }
-
-async function doGenerate() {
-  current.value = 0;
-  tab.value = 'preview';
-  try {
-    const data = await store.generate({ keyword: keyword.value.trim(), durasi: durasi.value, model: model.value });
-    logActivity({ action: 'generate', description: `Generate video "${keyword.value}" (${durasi.value} dtk, ${model.value})`, user: auth.user });
-    notif.push({ title: 'Video berhasil dibuat', message: `"${data?.result?.judul || keyword.value}" siap dilihat di Riwayat.`, type: 'success', link: '/history' });
-  } catch (e) { /* error sudah ditampilkan dari store */ }
-}
-async function copyText(text, label) {
-  try {
-    await navigator.clipboard.writeText(text || '');
-    Swal.fire({ icon: 'success', title: `${label} tersalin`, timer: 1200, showConfirmButton: false });
-  } catch {
-    Swal.fire({ icon: 'error', title: 'Gagal menyalin' });
-  }
-}
-function copyCaption() { copyText(result.value?.caption, 'Caption'); }
-function downloadTxt() {
-  const blob = new Blob([resultText.value], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `ruang-dharma-${(result.value?.keyword || 'video').toLowerCase().replace(/\s+/g, '-')}.txt`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 watch(() => route.query, applyQuery);
-onMounted(() => {
-  applyQuery();
-  store.fetchQuota().catch(() => {});
-});
+onMounted(applyQuery);
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function generate() {
+    if (!canGenerate.value) return;
+    loading.value = true;
+    error.value = null;
+    result.value = null;
+    step.value = 0;
+    const ticker = setInterval(() => step.value < STEPS.length - 1 && step.value++, 650);
+    try {
+        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value }), wait(STEPS.length * 650)]);
+        step.value = STEPS.length - 1;
+        await wait(350);
+        result.value = res.data.result;
+        generation.value = res.data.generation;
+        tab.value = 'naskah';
+        rt.pulseNow(); // notifikasi "Video selesai dibuat" muncul lewat realtime
+    } catch (e) {
+        const status = e.response?.status;
+        const message = errorMessage(e, 'Gagal membuat video.');
+        error.value = { kind: status === 429 ? 'quota' : status === 422 && /diblokir/i.test(message) ? 'blocked' : 'other', message };
+    } finally {
+        clearInterval(ticker);
+        loading.value = false;
+    }
+}
+
+async function sendToReview() {
+    if (!generation.value) return;
+    sending.value = true;
+    try {
+        const { data } = await api.post(`/generations/${generation.value.id}/submit-review`);
+        generation.value = data.data;
+        toast.success('Dikirim ke reviewer. Kamu akan dapat notifikasi saat ditinjau.');
+        rt.pulseNow();
+    } catch (e) {
+        toast.error(errorMessage(e));
+    } finally {
+        sending.value = false;
+    }
+}
+const fullText = computed(() => (result.value ? generationToText(result.value) : ''));
+function download() {
+    saveText(fullText.value, `ruang-dharma-${result.value.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`);
+}
 </script>
+
+<template>
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
+        <!-- Formulir -->
+        <section class="card relative h-fit overflow-hidden p-6 xl:sticky xl:top-24">
+            <div class="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-brand-gradient opacity-15 blur-2xl"></div>
+            <h1 class="relative font-display text-2xl font-bold">Buat video baru</h1>
+            <p class="relative mt-1 text-sm text-muted">Satu kata kunci jadi naskah 6 bagian, prompt visual, dan caption.</p>
+
+            <form class="relative mt-6 space-y-6" @submit.prevent="generate">
+                <div>
+                    <label class="label" for="keyword">Tema / kata kunci</label>
+                    <div class="relative">
+                        <Icon name="sparkles" class="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-violet-500" />
+                        <input id="keyword" v-model="keyword" class="input pl-11 text-base" maxlength="100" placeholder="mis. Rwa Bhineda" autocomplete="off" />
+                    </div>
+                    <div class="mt-2.5 flex flex-wrap gap-1.5">
+                        <button v-for="s in SUGGESTIONS" :key="s" type="button" :class="keyword === s ? 'chip-active' : ''" class="chip" @click="keyword = s">{{ s }}</button>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="label">Durasi</p>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button v-for="d in DURATIONS" :key="d" type="button" :class="durasi === d ? 'border-ink bg-yellow-300 text-zinc-950 shadow-brutal-sm' : 'border-line hover:border-violet-300'" class="rounded-2xl border-2 px-3 py-3 text-center transition" @click="durasi = d">
+                            <span class="block font-display text-xl font-bold">{{ d }}<span class="text-xs">dtk</span></span>
+                            <span class="block text-[11px] font-semibold opacity-75">{{ d === 30 ? 'Ringkas' : d === 60 ? 'Standar' : 'Lengkap' }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="label">Gaya penyampaian</p>
+                    <div class="space-y-2">
+                        <button v-for="m in MODELS" :key="m.value" type="button" :class="model === m.value ? 'border-ink bg-card shadow-brutal-sm' : 'border-line hover:border-violet-300'" class="flex w-full items-center gap-3 rounded-2xl border-2 px-3 py-2.5 text-left transition" @click="model = m.value">
+                            <span :class="model === m.value ? 'bg-brand-gradient text-white' : 'bg-surface-2 text-muted'" class="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition"><Icon :name="m.icon" class="h-5 w-5" /></span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-bold">{{ m.label }}</span>
+                                <span class="block text-xs text-muted">{{ m.desc }}</span>
+                            </span>
+                            <span :class="model === m.value ? 'border-ink bg-yellow-300' : 'border-line'" class="grid h-5 w-5 place-items-center rounded-full border-2"><span v-if="model === m.value" class="h-2 w-2 rounded-full bg-ink"></span></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl bg-surface-2 p-3">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="font-semibold">Sisa kuota hari ini</span>
+                        <span class="font-display font-bold tabular-nums"><span v-counter="quota.remaining">{{ quota.remaining }}</span> / {{ quota.limit }}</span>
+                    </div>
+                    <div class="mt-2 flex gap-1">
+                        <span v-for="i in Math.min(quota.limit, 20)" :key="i" :class="i <= quota.limit - quota.remaining ? 'bg-line' : 'bg-brand-gradient'" class="h-2 flex-1 rounded-full transition-colors"></span>
+                    </div>
+                </div>
+
+                <button v-ripple type="submit" class="btn btn-primary btn-lg shine w-full" :disabled="!canGenerate">
+                    <Spinner v-if="loading" class="h-5 w-5" />
+                    <Icon v-else name="wand-sparkles" class="h-5 w-5" />
+                    {{ loading ? 'Sedang membuat…' : outOfQuota ? 'Kuota hari ini habis' : 'Buat video' }}
+                </button>
+            </form>
+        </section>
+
+        <!-- Hasil -->
+        <section class="min-w-0">
+            <div v-if="loading" class="card p-8">
+                <p class="mb-6 font-display text-lg font-bold">Menyusun "{{ keyword }}"…</p>
+                <CanangLoader :steps="STEPS" :current="step" />
+            </div>
+
+            <div v-else-if="error" class="card-brutal p-6">
+                <div class="flex items-start gap-4">
+                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink" :class="error.kind === 'quota' ? 'bg-amber-300' : 'bg-rose-400'">
+                        <Icon :name="error.kind === 'quota' ? 'battery-low' : error.kind === 'blocked' ? 'ban' : 'circle-alert'" class="h-6 w-6 text-zinc-900" />
+                    </span>
+                    <div>
+                        <h2 class="font-display text-lg font-bold">{{ error.kind === 'quota' ? 'Kuota harian habis' : error.kind === 'blocked' ? 'Kata kunci diblokir admin' : 'Video belum berhasil dibuat' }}</h2>
+                        <p class="mt-1 text-sm text-muted">{{ error.message }}</p>
+                        <p class="mt-3 text-sm">
+                            <template v-if="error.kind === 'quota'">Kuota terisi lagi besok pagi. Butuh lebih banyak? Minta admin menaikkan paket kuota akunmu.</template>
+                            <template v-else-if="error.kind === 'blocked'">Pilih tema lain dari <RouterLink to="/templates" class="font-bold text-violet-600 underline dark:text-violet-300">Template & ide</RouterLink>.</template>
+                            <template v-else>Periksa koneksi lalu coba lagi.</template>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else-if="result" class="space-y-6">
+                <div class="card-brutal overflow-hidden">
+                    <div class="animate-gradient bg-brand-gradient relative overflow-hidden p-6 text-white">
+                        <div class="dot-bg absolute inset-0 opacity-20"></div>
+                        <div class="relative flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm font-bold text-white/80">Siap tayang · {{ result.durasi }} detik · {{ MODELS.find((m) => m.value === result.model)?.label }}</p>
+                                <h2 class="mt-1 font-display text-3xl font-bold">{{ result.judul }}</h2>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-sm border-2 border-white/60 bg-white/15 text-white hover:bg-white/25" @click="copyText(fullText, 'Semua hasil')"><Icon name="copy" class="h-4 w-4" /> Salin semua</button>
+                                <button type="button" class="btn btn-sm border-2 border-white/60 bg-white/15 text-white hover:bg-white/25" @click="download"><Icon name="download" class="h-4 w-4" /> Unduh .txt</button>
+                                <button v-if="generation && ['draft', 'revisi'].includes(generation.workflow_status)" type="button" class="btn btn-brutal btn-sm" :disabled="sending" @click="sendToReview"><Icon name="send" class="h-4 w-4" /> Kirim ke review</button>
+                                <Badge v-else-if="generation?.workflow_status === 'review'" color="yellow" icon="hourglass">Menunggu review</Badge>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-6 p-6 2xl:grid-cols-[300px_1fr]">
+                        <PhonePreview :naskah="result.naskah" :title="result.judul" :model="result.model" />
+                        <div class="min-w-0">
+                            <Segmented v-model="tab" :options="[{ value: 'naskah', label: 'Naskah', icon: 'file-text' }, { value: 'caption', label: 'Caption', icon: 'hash' }, { value: 'prompts', label: 'Prompt visual', icon: 'image' }]" class="mb-4" />
+                            <ol v-if="tab === 'naskah'" class="space-y-2.5">
+                                <li v-for="n in result.naskah" :key="n.bagian" class="flex gap-3 rounded-2xl border border-line p-3.5">
+                                    <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ink text-xs font-extrabold text-surface">{{ n.bagian }}</span>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-xs"><b>{{ n.speaker }}</b> <span class="text-muted">· {{ n.suara }} · ±{{ n.estimasi_detik }} dtk</span></p>
+                                        <p class="mt-1 text-[15px] leading-relaxed">{{ partText(n) }}</p>
+                                    </div>
+                                </li>
+                            </ol>
+                            <div v-else-if="tab === 'caption'">
+                                <pre class="rounded-2xl border border-line bg-surface-2/60 p-4 font-sans text-sm leading-relaxed whitespace-pre-wrap">{{ result.caption }}</pre>
+                                <button type="button" class="btn btn-primary btn-sm mt-3" @click="copyText(result.caption, 'Caption')"><Icon name="copy" class="h-4 w-4" /> Salin caption</button>
+                            </div>
+                            <ol v-else class="space-y-2.5">
+                                <li v-for="(p, i) in result.prompts" :key="i" class="group flex gap-3 rounded-2xl border border-line p-3.5">
+                                    <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-yellow-300 text-xs font-extrabold text-zinc-900">{{ i + 1 }}</span>
+                                    <p class="flex-1 text-sm leading-relaxed">{{ p }}</p>
+                                    <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label="Salin prompt" @click="copyText(p, `Prompt bagian ${i + 1}`)"><Icon name="copy" class="h-4 w-4" /></button>
+                                </li>
+                            </ol>
+                            <button v-if="generation" type="button" class="btn btn-secondary btn-sm mt-5" @click="detailId = generation.id"><Icon name="square-pen" class="h-4 w-4" /> Edit, komentar & jadwal</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="rounded-3xl border-2 border-dashed border-line p-4 text-sm text-muted">
+                    <b class="text-ink">Aturan Ruang Dharma diterapkan:</b> {{ result.aturan?.pembuka }} di awal, {{ result.aturan?.penutup }} di akhir · {{ result.aturan?.visual }} · {{ result.aturan?.suara }}.
+                </div>
+            </div>
+
+            <div v-else class="card relative grid min-h-[480px] place-items-center overflow-hidden p-10 text-center">
+                <div class="dot-bg absolute inset-0 opacity-0 dark:opacity-5"></div>
+                <div class="relative">
+                    <div class="animate-float mx-auto w-fit"><CanangMark :size="140" stroke="currentColor" class="text-ink" /></div>
+                    <h2 class="mt-6 font-display text-2xl font-bold">Canang sudah siap, tinggal temanya</h2>
+                    <p class="mx-auto mt-2 max-w-md text-sm text-muted">Pilih tema di kiri lalu tekan <b>Buat video</b>. Lima kelopak akan menyala satu per satu selama naskah disusun.</p>
+                    <div class="mx-auto mt-6 grid max-w-md gap-2 text-left text-sm">
+                        <p class="flex items-center gap-2"><Icon name="check" class="h-4 w-4 text-emerald-500" :stroke="3" /> Selalu dibuka "Om Swastyastu" & ditutup "Om Santi Santi Santi Om"</p>
+                        <p class="flex items-center gap-2"><Icon name="check" class="h-4 w-4 text-emerald-500" :stroke="3" /> Visual 3D Pixar 9:16, suara Ibu Aria & Anak Lumi</p>
+                        <p class="flex items-center gap-2"><Icon name="check" class="h-4 w-4 text-emerald-500" :stroke="3" /> Hasil otomatis tersimpan di Riwayat & bisa direview</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <GenerationModal :id="detailId" @close="detailId = null" />
+    </div>
+</template>

@@ -33,19 +33,30 @@ class ProfileController extends Controller
             $data['password'] = Hash::make($data['password']);
         } else { unset($data['password']); }
         unset($data['current_password'], $data['password_confirmation']);
+        if (array_key_exists('avatar', $data) && $data['avatar'] === null && ! $request->hasFile('avatar')) unset($data['avatar']);
+        if ($request->boolean('remove_avatar') && $user->avatar) {
+            $old = ltrim(str_replace('/storage/', '', $user->avatar), '/');
+            if (Storage::disk('public')->exists($old)) Storage::disk('public')->delete($old);
+            $data['avatar'] = null;
+        }
         $user->update($data);
-        return response()->json(['success' => true, 'user' => AuthController::userPayload($user->fresh()), 'message' => 'Profil berhasil diperbarui.']);
+        \App\Services\ActivityLogger::fromRequest($request, 'profile.update', 'Memperbarui profil');
+        return response()->json(['success' => true, 'user' => AuthController::userPayload($user->fresh()->load(['roles', 'quotaPlan'])), 'message' => 'Profil berhasil diperbarui.']);
     }
 
     public function updatePassword(Request $request)
     {
         $data = $request->validate([
             'current_password' => 'required|string',
-            'password' => 'required|string|min:6|confirmed',
-        ], ['current_password.required' => 'Password lama wajib diisi.', 'password.min' => 'Password baru minimal 6 karakter.', 'password.confirmed' => 'Konfirmasi password tidak cocok.']);
+            'password' => 'required|string|min:' . \App\Models\Setting::getInt('password_min_length', 6) . '|confirmed',
+        ], ['current_password.required' => 'Password lama wajib diisi.', 'password.min' => 'Password baru minimal :min karakter.', 'password.confirmed' => 'Konfirmasi password tidak cocok.']);
         $user = $request->user();
         if (!Hash::check($data['current_password'], $user->password)) return response()->json(['success' => false, 'message' => 'Password lama salah.'], 422);
         $user->update(['password' => Hash::make($data['password'])]);
+        // Cabut sesi lain, pertahankan token yang sedang dipakai.
+        $current = $user->currentAccessToken();
+        $user->tokens()->when($current && isset($current->id), fn ($q) => $q->where('id', '!=', $current->id))->delete();
+        \App\Services\ActivityLogger::fromRequest($request, 'profile.password', 'Mengubah password');
         return response()->json(['success' => true, 'message' => 'Password berhasil diubah.']);
     }
 }

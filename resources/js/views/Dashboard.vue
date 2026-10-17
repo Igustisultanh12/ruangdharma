@@ -1,119 +1,155 @@
-<template>
-  <div>
-    <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Selamat datang, {{ auth.user?.name }}</h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400">Ringkasan aktivitas studio hari ini.</p>
-      </div>
-      <RouterLink to="/generate" class="btn-primary">
-        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-        Generate Video
-      </RouterLink>
-    </div>
-
-    <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-      <StatCard title="Video Hari Ini" :value="todayCount" subtitle="Dibuat hari ini" tone="violet">
-        <template #icon><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" /></svg></template>
-      </StatCard>
-      <StatCard title="Total Video" :value="totalCount" subtitle="Semua riwayat saya" tone="sky">
-        <template #icon><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg></template>
-      </StatCard>
-      <StatCard title="Kuota Tersisa" :value="`${quota.remaining} / ${quota.limit}`" subtitle="Kuota harian" tone="amber">
-        <template #icon><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg></template>
-        <template #footer>
-          <div class="progress-track"><div class="progress-bar" :style="{ width: quotaPct + '%' }"></div></div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">Terpakai {{ quota.used }} video hari ini</p>
-        </template>
-      </StatCard>
-      <StatCard title="Limit Harian" :value="quota.limit" subtitle="Video per hari" tone="emerald">
-        <template #icon><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg></template>
-      </StatCard>
-    </div>
-
-    <div class="grid lg:grid-cols-5 gap-4 mb-4">
-      <div class="card lg:col-span-3">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-1">Aktivitas 7 Hari Terakhir</h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Dihitung dari 20 riwayat terbaru.</p>
-        <BarChart :data="last7" />
-      </div>
-      <div class="card lg:col-span-2">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-4">Distribusi Model</h2>
-        <DonutChart :data="modelDonut" />
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="font-bold text-slate-900 dark:text-white">Riwayat Terbaru</h2>
-        <RouterLink to="/history" class="text-sm text-violet-600 hover:underline">Lihat semua</RouterLink>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead><tr><th>Kata Kunci</th><th>Durasi</th><th>Model</th><th>Tanggal</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr v-for="g in recent" :key="g.id">
-              <td class="font-medium">{{ g.keyword }}</td>
-              <td>{{ g.durasi }} dtk</td>
-              <td><Badge :variant="modelVariant(g.model)">{{ modelLabel(g.model) }}</Badge></td>
-              <td>{{ formatDate(g.created_at) }}</td>
-              <td><Badge variant="success">{{ g.status || 'completed' }}</Badge></td>
-            </tr>
-            <tr v-if="!recent.length"><td colspan="5"><EmptyState title="Belum ada riwayat" description="Mulai dengan Generate Video pertama Anda." /></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</template>
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { useAuthStore } from '../stores/auth.js';
-import { useNotificationStore } from '../stores/notifications.js';
-import api from '../services/api.js';
-import StatCard from '../components/StatCard.vue';
-import Badge from '../components/Badge.vue';
-import EmptyState from '../components/EmptyState.vue';
-import BarChart from '../components/BarChart.vue';
-import DonutChart from '../components/DonutChart.vue';
+import CanangMark from '@/components/brand/CanangMark.vue';
+import GenerationModal from '@/components/generation/GenerationModal.vue';
+import Badge from '@/components/ui/Badge.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import Icon from '@/components/ui/Icon.vue';
+import StatCard from '@/components/ui/StatCard.vue';
+import api from '@/lib/api.js';
+import { date, greeting, isoDate, modelColor, modelLabel, relative, time, workflowColor, workflowLabel } from '@/lib/format.js';
+import { useRealtime } from '@/composables/useRealtime.js';
+import { useAuthStore } from '@/stores/auth.js';
 
 const auth = useAuthStore();
-const notif = useNotificationStore();
-const quota = ref({ remaining: 0, limit: 5, used: 0 });
-const items = ref([]);
-const totalCount = ref(0);
+const counts = ref(null);
+const recent = ref([]);
+const upcoming = ref([]);
+const templates = ref([]);
+const loading = ref(true);
+const detailId = ref(null);
 
-const MODEL_LABELS = { narasi: 'Narasi', ngobrol: 'Ngobrol', gabungan: 'Gabungan' };
-const MODEL_COLORS = { narasi: '#7c3aed', ngobrol: '#f59e0b', gabungan: '#0ea5e9' };
-function modelLabel(m) { return MODEL_LABELS[m] || m; }
-function modelVariant(m) { return m === 'narasi' ? 'violet' : m === 'ngobrol' ? 'warning' : 'info'; }
-function formatDate(iso) { try { return new Date(iso).toLocaleString('id-ID'); } catch { return iso; } }
+const rt = useRealtime(['generations', 'review'], () => load(true));
+const quota = computed(() => rt.quota);
+const needsRevision = computed(() => recent.value.filter((g) => g.workflow_status === 'revisi'));
 
-const todayStr = new Date().toISOString().slice(0, 10);
-const todayCount = computed(() => items.value.filter((g) => (g.created_at || '').slice(0, 10) === todayStr).length);
-const recent = computed(() => items.value.slice(0, 5));
-const quotaPct = computed(() => (quota.value.limit ? Math.round((quota.value.remaining / quota.value.limit) * 100) : 0));
-const last7 = computed(() => {
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    days.push({ label: d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }), value: items.value.filter((g) => (g.created_at || '').slice(0, 10) === key).length });
-  }
-  return days;
-});
-const modelDonut = computed(() => ['narasi', 'ngobrol', 'gabungan'].map((m) => ({ label: MODEL_LABELS[m], value: items.value.filter((g) => g.model === m).length, color: MODEL_COLORS[m] })));
-
+async function load(silent = false) {
+    if (!silent) loading.value = true;
+    const month = isoDate().slice(0, 7);
+    try {
+        const [c, r, cal] = await Promise.all([
+            api.get('/generations/counts'),
+            api.get('/generations', { params: { per_page: 6, archived: 0 } }),
+            api.get('/generations/calendar', { params: { month } }),
+        ]);
+        counts.value = c.data.data;
+        recent.value = r.data.data.data;
+        const now = Date.now();
+        upcoming.value = (cal.data.data.data || []).filter((g) => g.publish_at && new Date(g.publish_at).getTime() >= now - 3600e3).slice(0, 4);
+    } finally {
+        loading.value = false;
+    }
+}
 onMounted(async () => {
-  try {
-    const { data } = await api.get('/quota');
-    quota.value = data;
-    notif.maybeQuotaWarning(data.remaining, data.limit);
-  } catch { /* abaikan */ }
-  try {
-    const { data } = await api.get('/generations', { params: { page: 1 } });
-    items.value = data.data || data || [];
-    totalCount.value = data.total ?? items.value.length;
-  } catch { /* abaikan */ }
+    load();
+    try {
+        const all = (await api.get('/templates')).data.data || [];
+        templates.value = all.sort(() => Math.random() - 0.5).slice(0, 4);
+    } catch {
+        templates.value = [];
+    }
 });
 </script>
+
+<template>
+    <div>
+        <section class="animate-gradient bg-brand-gradient relative mb-8 overflow-hidden rounded-[2rem] border-2 border-ink p-6 text-white shadow-brutal sm:p-8">
+            <div class="dot-bg absolute inset-0 opacity-20"></div>
+            <div class="absolute -right-6 -bottom-8 hidden rotate-12 opacity-95 sm:block"><CanangMark :size="170" /></div>
+            <div class="relative max-w-2xl">
+                <p class="text-sm font-bold text-white/80">{{ greeting() }}, {{ auth.firstName }} 👋</p>
+                <h1 class="mt-1 font-display text-3xl font-bold sm:text-4xl">Cerita dharma apa yang kita buat hari ini?</h1>
+                <p class="mt-2 text-white/85">
+                    <template v-if="quota">Kamu masih bisa membuat <b>{{ quota.remaining }}</b> video hari ini.</template>
+                    <template v-if="counts?.revisi"> Ada <b>{{ counts.revisi }}</b> naskah yang perlu direvisi.</template>
+                </p>
+                <div class="mt-5 flex flex-wrap gap-2">
+                    <RouterLink to="/generate" class="btn btn-brutal btn-sm"><Icon name="wand-sparkles" class="h-4 w-4" /> Buat video</RouterLink>
+                    <RouterLink to="/templates" class="btn btn-sm border-2 border-white/60 bg-white/15 text-white hover:bg-white/25"><Icon name="lightbulb" class="h-4 w-4" /> Cari ide</RouterLink>
+                    <RouterLink to="/calendar" class="btn btn-sm border-2 border-white/60 bg-white/15 text-white hover:bg-white/25"><Icon name="calendar-days" class="h-4 w-4" /> Kalender</RouterLink>
+                </div>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Dibuat hari ini" :value="quota?.used ?? 0" icon="zap" color="orange" :hint="quota ? `dari kuota ${quota.limit} video` : ''" to="/generate" :loading="!quota" />
+            <StatCard label="Video aktif" :value="counts?.all ?? 0" icon="clapperboard" color="violet" :hint="`${counts?.archived ?? 0} di arsip`" to="/history" :loading="loading" />
+            <StatCard label="Favorit" :value="counts?.favorites ?? 0" icon="star" color="amber" hint="Siap dipakai lagi" :to="{ path: '/history', query: { tab: 'favorites' } }" :loading="loading" />
+            <StatCard label="Terbit" :value="counts?.published ?? 0" icon="send" color="fuchsia" :hint="`${counts?.review ?? 0} menunggu review`" :loading="loading" />
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div class="card overflow-hidden xl:col-span-2">
+                <div class="flex items-center justify-between border-b border-line px-6 py-4">
+                    <h2 class="font-display text-lg font-bold">Terakhir dibuat</h2>
+                    <RouterLink to="/history" class="text-sm font-bold text-violet-600 hover:underline dark:text-violet-300">Lihat semua</RouterLink>
+                </div>
+                <div v-if="loading" class="space-y-3 p-6"><div v-for="i in 4" :key="i" class="skeleton h-12"></div></div>
+                <ul v-else-if="recent.length" class="divide-y divide-line">
+                    <li v-for="g in recent" :key="g.id">
+                        <button type="button" class="flex w-full items-center gap-4 px-6 py-3.5 text-left transition hover:bg-surface-2/60" @click="detailId = g.id">
+                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-surface-2 font-display text-sm font-bold">{{ g.durasi }}s</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="flex items-center gap-2"><span class="truncate font-bold">{{ g.keyword }}</span><Icon v-if="g.is_favorite" name="star" class="h-3.5 w-3.5 fill-yellow-400 text-yellow-500" /></span>
+                                <span class="text-xs text-muted">{{ relative(g.created_at) }}</span>
+                            </span>
+                            <Badge :color="modelColor(g.model)" size="xs" class="hidden sm:inline-flex">{{ modelLabel(g.model) }}</Badge>
+                            <Badge :color="workflowColor(g.workflow_status)" dot>{{ workflowLabel(g.workflow_status) }}</Badge>
+                        </button>
+                    </li>
+                </ul>
+                <EmptyState v-else icon="clapperboard" title="Belum ada video" description="Video pertamamu tinggal satu klik lagi.">
+                    <RouterLink to="/generate" class="btn btn-primary btn-sm"><Icon name="wand-sparkles" class="h-4 w-4" /> Buat video pertama</RouterLink>
+                </EmptyState>
+            </div>
+
+            <div class="space-y-6">
+                <div v-if="needsRevision.length" class="card-brutal p-5">
+                    <h2 class="flex items-center gap-2 font-display text-lg font-bold"><Icon name="rotate-ccw" class="h-5 w-5 text-rose-500" /> Perlu revisi</h2>
+                    <ul class="mt-3 space-y-2">
+                        <li v-for="g in needsRevision" :key="g.id">
+                            <button type="button" class="w-full rounded-2xl bg-rose-50 p-3 text-left transition hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20" @click="detailId = g.id">
+                                <p class="text-sm font-bold">{{ g.keyword }}</p>
+                                <p class="line-clamp-2 text-xs text-rose-700 dark:text-rose-300">{{ g.review_note }}</p>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card p-5">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-display text-lg font-bold">Jadwal tayang</h2>
+                        <RouterLink to="/calendar" class="text-sm font-bold text-violet-600 hover:underline dark:text-violet-300">Kalender</RouterLink>
+                    </div>
+                    <ul v-if="upcoming.length" class="mt-4 space-y-3">
+                        <li v-for="g in upcoming" :key="g.id" class="flex items-center gap-3">
+                            <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-yellow-300 text-center leading-none text-zinc-900">
+                                <span><span class="block font-display text-lg font-bold">{{ new Date(g.publish_at).getDate() }}</span><span class="text-[10px] font-bold">{{ date(g.publish_at, { month: 'short' }) }}</span></span>
+                            </span>
+                            <button type="button" class="min-w-0 flex-1 text-left" @click="detailId = g.id">
+                                <span class="block truncate text-sm font-bold">{{ g.keyword }}</span>
+                                <span class="text-xs text-muted">pukul {{ time(g.publish_at) }}</span>
+                            </button>
+                        </li>
+                    </ul>
+                    <p v-else class="mt-3 text-sm text-muted">Belum ada jadwal bulan ini. Atur jadwal dari detail video.</p>
+                </div>
+
+                <div class="card p-5">
+                    <h2 class="font-display text-lg font-bold">Ide untuk dicoba</h2>
+                    <ul class="mt-3 space-y-2">
+                        <li v-for="t in templates" :key="t.keyword">
+                            <RouterLink :to="{ path: '/generate', query: { keyword: t.keyword, durasi: t.default_durasi, model: t.default_model } }" class="group flex items-center gap-3 rounded-2xl p-2 transition hover:bg-surface-2">
+                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-surface-2 group-hover:bg-brand-gradient group-hover:text-white"><Icon name="lightbulb" class="h-4 w-4" /></span>
+                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold">{{ t.judul }}</span><span class="block truncate text-xs text-muted">{{ t.deskripsi }}</span></span>
+                                <Icon name="arrow-up-right" class="h-4 w-4 text-muted opacity-0 transition group-hover:opacity-100" />
+                            </RouterLink>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <GenerationModal :id="detailId" @close="detailId = null" @changed="load(true)" @deleted="load(true)" />
+    </div>
+</template>

@@ -1,77 +1,62 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import Login from '../views/Login.vue';
-import Dashboard from '../views/Dashboard.vue';
-import Generate from '../views/Generate.vue';
-import History from '../views/History.vue';
-import Profile from '../views/Profile.vue';
-import TemplateLibrary from '../views/TemplateLibrary.vue';
-import MediaLibrary from '../views/MediaLibrary.vue';
-import ContentCalendar from '../views/ContentCalendar.vue';
-import AdminDashboard from '../views/Admin/Dashboard.vue';
-import AdminUsers from '../views/Admin/Users.vue';
-import AdminHistory from '../views/Admin/History.vue';
-import AdminSettings from '../views/Admin/Settings.vue';
-import AdminMuseStatus from '../views/Admin/MuseStatus.vue';
-import AdminMuseConfig from '../views/Admin/MuseConfig.vue';
-import AdminActivityLogs from '../views/Admin/ActivityLogs.vue';
-import AdminLoginHistory from '../views/Admin/LoginHistory.vue';
-import AdminRolePermissions from '../views/Admin/RolePermissions.vue';
-import AdminReviewQueue from '../views/Admin/ReviewQueue.vue';
-import AdminAnalytics from '../views/Admin/Analytics.vue';
-import AdminQuotaPlans from '../views/Admin/QuotaPlans.vue';
-import AdminApiKeys from '../views/Admin/ApiKeys.vue';
-import AdminWebhooks from '../views/Admin/Webhooks.vue';
+import { useAuthStore } from '@/stores/auth.js';
+import { ADMIN, REVIEWERS } from '@/lib/menu.js';
 
-const crumb = (label, to) => ({ label, to });
-const dash = { label: 'Dashboard', to: '/' };
-const admin = { label: 'Admin', to: '/admin' };
+const home = { label: 'Beranda', to: '/' };
+const adm = { label: 'Admin', to: '/admin' };
+const page = (path, name, component, title, extra = {}) => ({ path, name, component, meta: { auth: true, title, breadcrumb: [extra.parent || home, { label: title }], ...extra.meta } });
+const admin = (path, name, component, title) => page(path, name, component, title, { parent: adm, meta: { roles: ADMIN } });
 
 const routes = [
-  { path: '/', name: 'dashboard', component: Dashboard, meta: { auth: true, title: 'Dashboard', breadcrumb: [crumb('Dashboard')] } },
-  { path: '/login', name: 'login', component: Login, meta: { title: 'Masuk' } },
-  { path: '/generate', name: 'generate', component: Generate, meta: { auth: true, title: 'Generate Video', breadcrumb: [dash, crumb('Studio'), crumb('Generate Video')] } },
-  { path: '/templates', name: 'templates', component: TemplateLibrary, meta: { auth: true, title: 'Template & Ide', breadcrumb: [dash, crumb('Studio'), crumb('Template & Ide')] } },
-  { path: '/media', name: 'media', component: MediaLibrary, meta: { auth: true, title: 'Media Library', breadcrumb: [dash, crumb('Studio'), crumb('Media Library')] } },
-  { path: '/calendar', name: 'calendar', component: ContentCalendar, meta: { auth: true, title: 'Kalender Konten', breadcrumb: [dash, crumb('Studio'), crumb('Kalender Konten')] } },
-  { path: '/history', name: 'history', component: History, meta: { auth: true, title: 'Riwayat', breadcrumb: [dash, crumb('Riwayat'), crumb('Semua Riwayat')] } },
-  { path: '/profile', name: 'profile', component: Profile, meta: { auth: true, title: 'Profil', breadcrumb: [dash, crumb('Profil')] } },
-  { path: '/admin', name: 'admin.dashboard', component: AdminDashboard, meta: { auth: true, admin: true, title: 'Dashboard Admin', breadcrumb: [admin, crumb('Dashboard')] } },
-  { path: '/admin/users', name: 'admin.users', component: AdminUsers, meta: { auth: true, admin: true, title: 'Pengguna', breadcrumb: [admin, crumb('Pengguna')] } },
-  { path: '/admin/roles', name: 'admin.roles', component: AdminRolePermissions, meta: { auth: true, admin: true, title: 'Role & Permission', breadcrumb: [admin, crumb('Role & Permission')] } },
-  { path: '/admin/review', name: 'admin.review', component: AdminReviewQueue, meta: { auth: true, admin: true, title: 'Review Naskah', breadcrumb: [admin, crumb('Review Naskah')] } },
-  { path: '/admin/analytics', name: 'admin.analytics', component: AdminAnalytics, meta: { auth: true, admin: true, title: 'Analitik', breadcrumb: [admin, crumb('Analitik')] } },
-  { path: '/admin/activity-logs', name: 'admin.activity-logs', component: AdminActivityLogs, meta: { auth: true, admin: true, title: 'Log Aktivitas', breadcrumb: [admin, crumb('Log Aktivitas')] } },
-  { path: '/admin/login-history', name: 'admin.login-history', component: AdminLoginHistory, meta: { auth: true, admin: true, title: 'Riwayat Login', breadcrumb: [admin, crumb('Riwayat Login')] } },
-  { path: '/admin/history', name: 'admin.history', component: AdminHistory, meta: { auth: true, admin: true, title: 'Riwayat Semua', breadcrumb: [admin, crumb('Riwayat Semua')] } },
-  { path: '/admin/settings', name: 'admin.settings', component: AdminSettings, meta: { auth: true, admin: true, title: 'Pengaturan', breadcrumb: [admin, crumb('Pengaturan')] } },
-  { path: '/admin/muse', name: 'admin.muse', component: AdminMuseStatus, meta: { auth: true, admin: true, title: 'Status Muse', breadcrumb: [admin, crumb('Status Muse')] } },
-  { path: '/admin/muse-config', name: 'admin.muse-config', component: AdminMuseConfig, meta: { auth: true, admin: true, title: 'Integrasi Muse', breadcrumb: [admin, crumb('Integrasi Muse')] } },
-  { path: '/admin/api-keys', name: 'admin.api-keys', component: AdminApiKeys, meta: { auth: true, admin: true, title: 'API Keys', breadcrumb: [admin, crumb('API Keys')] } },
-  { path: '/admin/webhooks', name: 'admin.webhooks', component: AdminWebhooks, meta: { auth: true, admin: true, title: 'Webhooks', breadcrumb: [admin, crumb('Webhooks')] } },
-  { path: '/admin/quota-plans', name: 'admin.quota-plans', component: AdminQuotaPlans, meta: { auth: true, admin: true, title: 'Paket Kuota', breadcrumb: [admin, crumb('Paket Kuota')] } },
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+    { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { guest: true, title: 'Masuk' } },
+    { path: '/', name: 'dashboard', component: () => import('@/views/Dashboard.vue'), meta: { auth: true, title: 'Beranda', breadcrumb: [{ label: 'Beranda' }] } },
+    page('/generate', 'generate', () => import('@/views/Generate.vue'), 'Buat video'),
+    page('/templates', 'templates', () => import('@/views/TemplateLibrary.vue'), 'Template & ide'),
+    page('/history', 'history', () => import('@/views/History.vue'), 'Riwayat saya'),
+    page('/calendar', 'calendar', () => import('@/views/ContentCalendar.vue'), 'Kalender konten'),
+    page('/media', 'media', () => import('@/views/MediaLibrary.vue'), 'Media'),
+    page('/notifications', 'notifications', () => import('@/views/Notifications.vue'), 'Notifikasi'),
+    page('/profile', 'profile', () => import('@/views/Profile.vue'), 'Profil'),
+    page('/admin/review', 'admin.review', () => import('@/views/Admin/ReviewQueue.vue'), 'Antrean review', { parent: adm, meta: { roles: REVIEWERS } }),
+    { ...admin('/admin', 'admin.dashboard', () => import('@/views/Admin/Dashboard.vue'), 'Ringkasan admin'), meta: { auth: true, roles: ADMIN, title: 'Ringkasan admin', breadcrumb: [adm, { label: 'Ringkasan' }] } },
+    admin('/admin/analytics', 'admin.analytics', () => import('@/views/Admin/Analytics.vue'), 'Analitik'),
+    admin('/admin/history', 'admin.history', () => import('@/views/Admin/History.vue'), 'Semua video'),
+    admin('/admin/users', 'admin.users', () => import('@/views/Admin/Users.vue'), 'Pengguna'),
+    admin('/admin/roles', 'admin.roles', () => import('@/views/Admin/RolePermissions.vue'), 'Role & izin'),
+    admin('/admin/quota-plans', 'admin.quota-plans', () => import('@/views/Admin/QuotaPlans.vue'), 'Paket kuota'),
+    admin('/admin/settings', 'admin.settings', () => import('@/views/Admin/Settings.vue'), 'Pengaturan'),
+    admin('/admin/muse-config', 'admin.muse-config', () => import('@/views/Admin/MuseConfig.vue'), 'Integrasi Muse'),
+    { path: '/admin/muse', redirect: '/admin/muse-config' },
+    admin('/admin/api-keys', 'admin.api-keys', () => import('@/views/Admin/ApiKeys.vue'), 'API key'),
+    admin('/admin/webhooks', 'admin.webhooks', () => import('@/views/Admin/Webhooks.vue'), 'Webhook'),
+    admin('/admin/activity-logs', 'admin.activity-logs', () => import('@/views/Admin/ActivityLogs.vue'), 'Log aktivitas'),
+    admin('/admin/login-history', 'admin.login-history', () => import('@/views/Admin/LoginHistory.vue'), 'Riwayat login'),
+    { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
-const router = createRouter({ history: createWebHistory(), routes });
+const router = createRouter({
+    history: createWebHistory(),
+    routes,
+    scrollBehavior: (to, from, saved) => saved || { top: 0 },
+});
 
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token');
-  let user = null;
-  try {
-    user = JSON.parse(localStorage.getItem('user') || 'null');
-  } catch {
-    user = null;
-  }
-  if (to.meta.auth && !token) return next({ name: 'login', query: { redirect: to.fullPath } });
-  // Guard admin: backend baru mengenal role admin/pengguna. Role 'editor'
-  // (modul Role & Permission) masih dikelola frontend sampai backend mendukungnya.
-  if (to.meta.admin && user?.role !== 'admin') return next({ name: 'dashboard' });
-  if (to.name === 'login' && token) return next({ name: 'dashboard' });
-  next();
+router.beforeEach((to) => {
+    const auth = useAuthStore();
+    if (to.meta.auth && !auth.isLoggedIn) return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} };
+    if (to.name === 'login' && auth.isLoggedIn) return { name: 'dashboard' };
+    if (to.meta.roles && !auth.hasAnyRole(to.meta.roles)) return { name: 'dashboard' };
+    return true;
 });
 
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} — Ruang Dharma Studio` : 'Ruang Dharma Studio';
+    document.title = to.meta.title ? `${to.meta.title} — Ruang Dharma Studio` : 'Ruang Dharma Studio';
+});
+
+// Setelah deploy baru, chunk lama bisa hilang → muat ulang halaman sekali.
+router.onError((err, to) => {
+    if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(err?.message || '')) {
+        window.location.assign(to.fullPath);
+    }
 });
 
 export default router;

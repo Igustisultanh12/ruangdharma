@@ -23,15 +23,38 @@ class AdminController extends Controller
             'active_users' => User::where('is_active', true)->count(),
             'total_users' => User::count(),
             'by_model' => VideoGeneration::whereDate('created_at', $today)->select('model', DB::raw('count(*) as total'))->groupBy('model')->pluck('total', 'model'),
-            'last_7_days' => VideoGeneration::where('created_at', '>=', now()->subDays(6)->startOfDay())->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as total'))->groupBy('date')->orderBy('date')->get(),
+            'last_7_days' => $this->dailySeries(7),
+            'review_pending' => VideoGeneration::where('workflow_status', 'review')->count(),
+            'published_total' => VideoGeneration::where('workflow_status', 'published')->count(),
+            'by_workflow' => VideoGeneration::select('workflow_status', DB::raw('count(*) as total'))->groupBy('workflow_status')->pluck('total', 'workflow_status'),
+            'recent_generations' => VideoGeneration::with('user:id,name,email,avatar')->latest()->limit(6)->get(['id', 'user_id', 'keyword', 'durasi', 'model', 'workflow_status', 'created_at']),
+            'recent_activities' => ActivityLog::with('user:id,name,avatar')->latest('id')->limit(8)->get(),
+            'top_users_today' => User::withCount(['videoGenerations as today' => fn ($x) => $x->whereDate('created_at', $today)])->orderByDesc('today')->limit(5)->get(['id', 'name', 'email', 'avatar'])->filter(fn ($u) => $u->today > 0)->values(),
         ]);
+    }
+
+    /** Deret harian kontinu (tanggal kosong = 0) agar grafik tidak bolong. */
+    protected function dailySeries(int $days): array
+    {
+        $rows = VideoGeneration::where('created_at', '>=', now()->subDays($days - 1)->startOfDay())
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('count(*) as total'))->groupBy(DB::raw('DATE(created_at)'))->pluck('total', 'd');
+        $out = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = now()->subDays($i)->toDateString();
+            $out[] = ['date' => $date, 'total' => (int) ($rows[$date] ?? 0)];
+        }
+        return $out;
     }
 
     public function users(Request $request)
     {
-        $q = User::withCount(['videoGenerations as today_generations' => fn($x) => $x->whereDate('created_at', now()->toDateString())])->with(['quotaPlan:id,name,daily_limit']);
+        $q = User::withCount([
+            'videoGenerations as today_generations' => fn($x) => $x->whereDate('created_at', now()->toDateString()),
+            'videoGenerations as total_generations',
+        ])->with(['quotaPlan:id,name,daily_limit', 'roles:id,name,display_name']);
         if ($request->filled('search')) $q->where(fn($w) => $w->where('name', 'like', "%{$request->search}%")->orWhere('email', 'like', "%{$request->search}%"));
         if ($request->filled('role')) $q->where('role', $request->input('role'));
+        if ($request->filled('status')) $q->where('is_active', $request->input('status') === 'active');
         return response()->json(['success' => true, 'data' => $q->orderBy('created_at')->paginate((int) $request->input('per_page', 20))]);
     }
 
@@ -39,14 +62,23 @@ class AdminController extends Controller
     {
         $user = User::findOrFail($id);
         $data = $request->validate([
-            'name' => 'sometimes|string|max:255', 'role' => 'sometimes|in:super_admin,admin,editor,pengguna,viewer',
+            'name' => 'sometimes|string|max:255', 'role' => 'sometimes|string|exists:roles,name',
             'daily_limit' => 'sometimes|nullable|integer|min:0|max:100', 'is_active' => 'sometimes|boolean',
             'quota_plan_id' => 'sometimes|nullable|integer|exists:quota_plans,id',
             'permissions' => 'sometimes|array', 'permissions.*' => 'string',
         ]);
+        if ($request->user()->id === $user->id && ((isset($data['is_active']) && ! $data['is_active']) || (isset($data['role']) && ! in_array($data['role'], ['admin', 'super_admin'], true)))) {
+            return response()->json(['success' => false, 'message' => 'Tidak bisa menonaktifkan atau menurunkan role akun sendiri.'], 422);
+        }
+        $role = $data['role'] ?? null;
+        unset($data['role']);
         $user->update($data);
+        // Role utama + pivot role_user harus selalu sinkron. Dulu hanya kolom `role` yang
+        // berubah, sehingga admin yang diturunkan tetap punya akses admin lewat pivot.
+        if ($role) $user->syncRoles([$role]);
+        if (array_key_exists('is_active', $data) && ! $data['is_active']) $user->tokens()->delete();
         ActivityLogger::fromRequest($request, 'user.update', "Admin memperbarui user: {$user->email}");
-        return response()->json(['success' => true, 'user' => $user->fresh(), 'message' => 'Pengguna diperbarui.']);
+        return response()->json(['success' => true, 'user' => $user->fresh()->load('quotaPlan:id,name,daily_limit'), 'message' => 'Pengguna diperbarui.']);
     }
     /** Alias sesuai spesifikasi: updateUserLimit. */
     public function updateUserLimit(Request $request, $id)
@@ -56,11 +88,14 @@ class AdminController extends Controller
         $user->update(['daily_limit' => $data['daily_limit']]);
         return response()->json(['success' => true, 'user' => $user->fresh(), 'message' => 'Limit user diperbarui.']);
     }
-    public function toggleUser($id) { return $this->toggleUserActive($id); }
-    public function toggleUserActive($id)
+    public function toggleUser(Request $request, $id) { return $this->toggleUserActive($request, $id); }
+    public function toggleUserActive(Request $request, $id)
     {
         $user = User::findOrFail($id);
+        if ($request->user()->id === $user->id) return response()->json(['success' => false, 'message' => 'Tidak bisa menonaktifkan akun sendiri.'], 422);
         $user->update(['is_active' => !$user->is_active]);
+        if (! $user->is_active) $user->tokens()->delete(); // paksa logout
+        ActivityLogger::fromRequest($request, 'user.toggle', ($user->is_active ? 'Aktifkan' : 'Nonaktifkan') . " user: {$user->email}");
         return response()->json(['success' => true, 'user' => $user->fresh(), 'message' => $user->is_active ? 'User diaktifkan.' : 'User dinonaktifkan.']);
     }
     public function deleteUser(Request $request, $id)
@@ -120,7 +155,7 @@ class AdminController extends Controller
     }
     public function analytics(Request $request, AnalyticsService $analytics)
     {
-        return response()->json(['success' => true, 'data' => $analytics->summary((int) $request->input('days', 30))]);
+        return response()->json(['success' => true, 'data' => $analytics->summary(max(1, min(365, (int) $request->input('days', 30))))]);
     }
     public function analyticsExportCsv(Request $request, AnalyticsService $analytics)
     {

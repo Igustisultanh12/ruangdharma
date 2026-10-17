@@ -1,121 +1,97 @@
-<template>
-  <div>
-    <h1 class="text-2xl font-bold text-slate-900 dark:text-white mb-1">Review Naskah</h1>
-    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Antrian naskah menunggu review. Status review disimpan di perangkat ini sampai backend menyediakan endpoint review.</p>
-
-    <div class="flex gap-1 bg-slate-200/70 dark:bg-slate-800 rounded-xl p-1 w-fit mb-4 overflow-x-auto max-w-full">
-      <button v-for="t in statusTabs" :key="t.key" @click="statusFilter = t.key" class="px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap" :class="statusFilter === t.key ? 'bg-white dark:bg-slate-700 shadow text-violet-700 dark:text-violet-300' : 'text-slate-600 dark:text-slate-300'">{{ t.label }}</button>
-    </div>
-
-    <div class="card !p-0 overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead><tr><th>Kata Kunci</th><th>Pengguna</th><th>Model</th><th>Status Review</th><th>Catatan</th><th class="text-right">Aksi</th></tr></thead>
-          <tbody>
-            <tr v-for="g in filtered" :key="g.id">
-              <td class="font-medium">{{ g.keyword }}</td>
-              <td>{{ g.user?.name || '-' }}</td>
-              <td><Badge variant="slate">{{ g.model }}</Badge></td>
-              <td><Badge :variant="statusVariant(reviewOf(g.id).status)">{{ statusLabel(reviewOf(g.id).status) }}</Badge></td>
-              <td class="max-w-56 truncate" :title="reviewOf(g.id).note">{{ reviewOf(g.id).note || '-' }}</td>
-              <td class="text-right">
-                <div class="flex gap-1.5 justify-end flex-wrap">
-                  <button @click="setStatus(g, 'approved')" class="btn-primary btn-sm">Approve</button>
-                  <button @click="openReject(g)" class="btn-danger btn-sm">Reject</button>
-                  <button @click="setStatus(g, 'published')" class="btn-gold btn-sm">Publish</button>
-                  <button @click="setStatus(g, 'archived')" class="btn-secondary btn-sm">Archive</button>
-                  <button @click="openReject(g, true)" class="btn-secondary btn-sm">Minta Revisi</button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!filtered.length"><td colspan="6"><EmptyState title="Tidak ada naskah" description="Ubah filter status atau tunggu generate baru." /></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <Pagination :page="page" :last-page="lastPage" :total="total" @prev="load(page - 1)" @next="load(page + 1)" />
-
-    <Modal :show="!!rejectTarget" title="Catatan Review" @close="rejectTarget = null">
-      <template v-if="rejectTarget">
-        <p class="text-sm mb-2">Naskah: <b>{{ rejectTarget.keyword }}</b> — {{ rejectMode === 'revisi' ? 'Minta revisi' : 'Reject' }}</p>
-        <textarea v-model="rejectNote" class="input" rows="4" placeholder="Tulis catatan untuk penulis..."></textarea>
-      </template>
-      <template #footer v-if="rejectTarget">
-        <button @click="rejectTarget = null" class="btn-secondary">Batal</button>
-        <button @click="confirmReject" class="btn-primary">Simpan</button>
-      </template>
-    </Modal>
-  </div>
-</template>
 <script setup>
-import { computed, onMounted, ref } from 'vue';
-import Swal from 'sweetalert2';
-import api from '../../services/api.js';
-import { useAuthStore } from '../../stores/auth.js';
-import { getReviewOverrides, saveReviewOverrides } from '../../services/preferences.js';
-import { logActivity } from '../../services/activity.js';
-import Badge from '../../components/Badge.vue';
-import EmptyState from '../../components/EmptyState.vue';
-import Pagination from '../../components/Pagination.vue';
-import Modal from '../../components/Modal.vue';
+import { computed, ref, watch } from 'vue';
+import GenerationModal from '@/components/generation/GenerationModal.vue';
+import Avatar from '@/components/ui/Avatar.vue';
+import Badge from '@/components/ui/Badge.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import Icon from '@/components/ui/Icon.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Pagination from '@/components/ui/Pagination.vue';
+import SearchInput from '@/components/ui/SearchInput.vue';
+import Segmented from '@/components/ui/Segmented.vue';
+import api, { errorMessage } from '@/lib/api.js';
+import { modelColor, modelLabel, partText, relative, workflowColor, workflowLabel } from '@/lib/format.js';
+import { confirmDialog, toast } from '@/lib/toast.js';
+import { useList } from '@/composables/useList.js';
+import { useRealtimeStore } from '@/stores/realtime.js';
 
-const auth = useAuthStore();
-const items = ref([]);
-const page = ref(1);
-const lastPage = ref(1);
-const total = ref(0);
-const statusFilter = ref('all');
-const overrides = ref(getReviewOverrides());
-const rejectTarget = ref(null);
-const rejectNote = ref('');
-const rejectMode = ref('reject');
+const rt = useRealtimeStore();
+const status = ref('review');
+const list = useList('/review-queue', { perPage: 10, filters: { status: 'review', search: '' }, realtime: ['review'] });
+watch(status, (v) => (list.filters.status = v));
+const detailId = ref(null);
+const busy = ref(null);
+const counts = computed(() => list.extra.value.counts || {});
+const tabs = computed(() => [
+    { value: 'review', label: 'Menunggu', icon: 'hourglass', count: counts.value.review || 0 },
+    { value: 'revisi', label: 'Perlu revisi', icon: 'rotate-ccw', count: counts.value.revisi || 0 },
+    { value: 'approved', label: 'Disetujui', icon: 'badge-check', count: counts.value.approved || 0 },
+    { value: 'published', label: 'Terbit', icon: 'send', count: counts.value.published || 0 },
+    { value: 'all', label: 'Semua', icon: 'layers' },
+]);
 
-const statusTabs = [
-  { key: 'all', label: 'Semua' },
-  { key: 'review', label: 'Menunggu Review' },
-  { key: 'revisi', label: 'Revisi' },
-  { key: 'approved', label: 'Disetujui' },
-  { key: 'rejected', label: 'Ditolak' },
-  { key: 'published', label: 'Terbit' },
-  { key: 'archived', label: 'Arsip' },
-];
-function reviewOf(id) {
-  return overrides.value[id] || { status: 'review', note: '' };
+async function act(g, kind) {
+    let payload = {};
+    if (kind === 'reject') {
+        const note = await confirmDialog({ title: `Minta revisi "${g.keyword}"`, message: 'Catatan ini dikirim ke pembuat video sebagai notifikasi.', confirmText: 'Kirim catatan', icon: 'rotate-ccw', input: { label: 'Catatan revisi', required: true, multiline: true, placeholder: 'Apa yang perlu diperbaiki?' } });
+        if (!note) return;
+        payload = { review_note: note };
+    }
+    if (kind === 'publish' && !(await confirmDialog({ title: `Terbitkan "${g.keyword}"?`, confirmText: 'Terbitkan', icon: 'send' }))) return;
+    busy.value = `${g.id}-${kind}`;
+    try {
+        const { data } = await api.post(`/generations/${g.id}/${kind}`, payload);
+        toast.success(data.message);
+        list.load({ silent: true });
+        rt.pulseNow();
+    } catch (e) {
+        toast.error(errorMessage(e));
+    } finally {
+        busy.value = null;
+    }
 }
-function statusLabel(s) {
-  return { review: 'Menunggu Review', revisi: 'Revisi', approved: 'Disetujui', rejected: 'Ditolak', published: 'Terbit', archived: 'Arsip' }[s] || s;
-}
-function statusVariant(s) {
-  return { review: 'warning', revisi: 'info', approved: 'success', rejected: 'danger', published: 'violet', archived: 'slate' }[s] || 'slate';
-}
-const filtered = computed(() => items.value.filter((g) => statusFilter.value === 'all' || reviewOf(g.id).status === statusFilter.value));
-
-async function load(p = 1) {
-  page.value = p;
-  const { data } = await api.get('/admin/generations', { params: { page: p } });
-  items.value = data.data || [];
-  lastPage.value = data.last_page || 1;
-  total.value = data.total ?? items.value.length;
-}
-function setStatus(g, status) {
-  overrides.value[g.id] = { status, note: overrides.value[g.id]?.note || '' };
-  saveReviewOverrides(overrides.value);
-  const action = { approved: 'approve', rejected: 'reject', published: 'publish', archived: 'update' }[status] || 'review';
-  logActivity({ action, description: `${statusLabel(status)} naskah "${g.keyword}"`, user: auth.user });
-  Swal.fire({ icon: 'success', title: `Naskah ${statusLabel(status).toLowerCase()}`, timer: 1200, showConfirmButton: false });
-}
-function openReject(g, isRevisi = false) {
-  rejectTarget.value = g;
-  rejectMode.value = isRevisi ? 'revisi' : 'reject';
-  rejectNote.value = overrides.value[g.id]?.note || '';
-}
-function confirmReject() {
-  const g = rejectTarget.value;
-  overrides.value[g.id] = { status: rejectMode.value === 'revisi' ? 'revisi' : 'rejected', note: rejectNote.value };
-  saveReviewOverrides(overrides.value);
-  logActivity({ action: rejectMode.value === 'revisi' ? 'review' : 'reject', description: `${rejectMode.value === 'revisi' ? 'Minta revisi' : 'Tolak'} naskah "${g.keyword}": ${rejectNote.value}`, user: auth.user });
-  rejectTarget.value = null;
-  Swal.fire({ icon: 'success', title: 'Catatan tersimpan', timer: 1200, showConfirmButton: false });
-}
-onMounted(() => load(1));
 </script>
+
+<template>
+    <div>
+        <PageHeader title="Antrean review" description="Tinjau naskah sebelum tayang. Antrean bertambah otomatis saat ada kiriman baru." />
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+            <Segmented v-model="status" :options="tabs" />
+            <SearchInput v-model="list.filters.search" placeholder="Cari kata kunci…" class="w-full sm:ml-auto sm:w-64" />
+        </div>
+
+        <div v-if="list.loading.value && !list.loaded.value" class="space-y-4"><div v-for="i in 3" :key="i" class="skeleton h-36 rounded-3xl"></div></div>
+        <div v-else-if="!list.items.value.length" class="card">
+            <EmptyState :icon="status === 'review' ? 'party-popper' : 'inbox'" :title="status === 'review' ? 'Antrean bersih' : 'Tidak ada video di tahap ini'" :description="status === 'review' ? 'Semua naskah sudah ditinjau. Kiriman baru akan muncul di sini otomatis.' : 'Pilih tahap lain di atas.'" />
+        </div>
+        <div v-else class="space-y-4">
+            <article v-for="g in list.items.value" :key="g.id" class="card card-lift p-5">
+                <div class="flex flex-wrap items-start gap-4">
+                    <Avatar :user="g.user" size="md" />
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" class="font-display text-lg font-bold hover:text-violet-600 dark:hover:text-violet-300" @click="detailId = g.id">{{ g.keyword }}</button>
+                            <Badge :color="workflowColor(g.workflow_status)" dot size="xs">{{ workflowLabel(g.workflow_status) }}</Badge>
+                            <Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge>
+                            <Badge size="xs">{{ g.durasi }} dtk</Badge>
+                        </div>
+                        <p class="mt-0.5 text-xs text-muted">{{ g.user?.name }} · diperbarui {{ relative(g.updated_at) }}</p>
+                        <ol class="mt-3 space-y-1 text-sm">
+                            <li v-for="n in (g.naskah || []).slice(0, 2)" :key="n.bagian" class="line-clamp-1"><b>{{ n.speaker }}:</b> {{ partText(n) }}</li>
+                        </ol>
+                        <p v-if="g.review_note" class="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><b>Catatan:</b> {{ g.review_note }}</p>
+                    </div>
+                    <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-col">
+                        <button v-if="g.workflow_status !== 'approved' && g.workflow_status !== 'published'" type="button" class="btn btn-success btn-sm" :disabled="busy === `${g.id}-approve`" @click="act(g, 'approve')"><Icon name="badge-check" class="h-4 w-4" /> Setujui</button>
+                        <button v-if="g.workflow_status !== 'revisi' && g.workflow_status !== 'published'" type="button" class="btn btn-secondary btn-sm" :disabled="busy === `${g.id}-reject`" @click="act(g, 'reject')"><Icon name="rotate-ccw" class="h-4 w-4" /> Minta revisi</button>
+                        <button v-if="g.workflow_status === 'approved'" type="button" class="btn btn-primary btn-sm" :disabled="busy === `${g.id}-publish`" @click="act(g, 'publish')"><Icon name="send" class="h-4 w-4" /> Terbitkan</button>
+                        <button type="button" class="btn btn-ghost btn-sm" @click="detailId = g.id"><Icon name="eye" class="h-4 w-4" /> Buka</button>
+                    </div>
+                </div>
+            </article>
+            <div class="card overflow-hidden"><Pagination :meta="list.meta" label="video" @go="list.go" /></div>
+        </div>
+
+        <GenerationModal :id="detailId" @close="detailId = null" @changed="list.load({ silent: true })" />
+    </div>
+</template>

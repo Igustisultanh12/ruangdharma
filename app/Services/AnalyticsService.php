@@ -10,7 +10,7 @@ class AnalyticsService
     {
         $from = now()->subDays($days - 1)->startOfDay();
         $base = VideoGeneration::where('created_at', '>=', $from);
-        $perDay = (clone $base)->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as total'))->groupBy('date')->orderBy('date')->get();
+        $perDay = (clone $base)->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as total'))->groupBy(DB::raw('DATE(created_at)'))->orderBy(DB::raw('DATE(created_at)'))->get();
         // Isi tanggal kosong dengan 0 agar grafik kontinu.
         $map = $perDay->pluck('total', 'date')->toArray();
         $series = [];

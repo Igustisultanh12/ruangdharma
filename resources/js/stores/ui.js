@@ -1,30 +1,23 @@
 import { defineStore } from 'pinia';
 
-// Dark mode + status sidebar. Dark mode disimpan di localStorage,
-// class .dark diterapkan ke <html> agar Tailwind + app.css mengikutinya.
 export const useUiStore = defineStore('ui', {
-  state: () => ({
-    darkMode: localStorage.getItem('rd_dark_mode') === '1',
-    mobileSidebarOpen: false,
-    expandedMenus: {},
-  }),
-  actions: {
-    initDark() {
-      document.documentElement.classList.toggle('dark', this.darkMode);
+    state: () => ({
+        dark: document.documentElement.classList.contains('dark'),
+        sidebarOpen: false,
+        paletteOpen: false,
+    }),
+    actions: {
+        setDark(v) {
+            this.dark = v;
+            document.documentElement.classList.toggle('dark', v);
+            try {
+                localStorage.setItem('rd_theme', v ? 'dark' : 'light');
+            } catch {
+                /* mode privat */
+            }
+        },
+        toggleDark() {
+            this.setDark(!this.dark);
+        },
     },
-    toggleDark() {
-      this.darkMode = !this.darkMode;
-      localStorage.setItem('rd_dark_mode', this.darkMode ? '1' : '0');
-      this.initDark();
-    },
-    toggleMenu(key) {
-      this.expandedMenus[key] = !this.expandedMenus[key];
-    },
-    setMenu(key, open) {
-      this.expandedMenus[key] = open;
-    },
-    closeMobileSidebar() {
-      this.mobileSidebarOpen = false;
-    },
-  },
 });

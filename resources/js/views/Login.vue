@@ -1,66 +1,96 @@
-<template>
-  <div class="card !p-0 overflow-hidden shadow-xl">
-    <div class="bg-gradient-to-r from-violet-700 to-amber-500 px-6 py-6 text-white">
-      <div class="flex items-center gap-3">
-        <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/20 font-bold text-lg">RD</span>
-        <div>
-          <h1 class="text-xl font-bold leading-tight">Ruang Dharma Studio</h1>
-          <p class="text-xs text-white/80">Generate Naskah, Video, Caption</p>
-        </div>
-      </div>
-    </div>
-    <div class="p-6">
-      <h2 class="text-lg font-bold text-slate-900 dark:text-white">Masuk ke akun</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Demo: admin@ruangdharma.id / admin123 — user@ruangdharma.id / user123</p>
-      <form @submit.prevent="submit" class="space-y-3">
-        <div>
-          <label class="label" for="login-email">Email</label>
-          <input id="login-email" v-model="email" class="input" placeholder="nama@email.com" type="email" required autocomplete="email" />
-        </div>
-        <div>
-          <label class="label" for="login-password">Password</label>
-          <input id="login-password" v-model="password" class="input" placeholder="Password" type="password" required autocomplete="current-password" />
-        </div>
-        <p v-if="err" class="alert-error">{{ err }}</p>
-        <button class="btn-primary w-full" :disabled="loading">
-          <svg v-if="loading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" d="M12 3a9 9 0 109 9" /></svg>
-          {{ loading ? 'Memproses...' : 'Masuk' }}
-        </button>
-      </form>
-      <div class="flex gap-2 mt-4">
-        <button @click="fill('admin@ruangdharma.id','admin123')" class="btn-secondary btn-sm flex-1">Isi Admin</button>
-        <button @click="fill('user@ruangdharma.id','user123')" class="btn-secondary btn-sm flex-1">Isi Pengguna</button>
-      </div>
-    </div>
-  </div>
-</template>
 <script setup>
-import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { useAuthStore } from '../stores/auth.js';
+import { onMounted, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import Icon from '@/components/ui/Icon.vue';
+import Spinner from '@/components/ui/Spinner.vue';
+import api, { errorMessage, fieldErrors } from '@/lib/api.js';
+import { toast } from '@/lib/toast.js';
+import { useAuthStore } from '@/stores/auth.js';
 
-const email = ref('');
-const password = ref('');
-const err = ref('');
-const loading = ref(false);
+const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
-const auth = useAuthStore();
+const form = reactive({ email: '', password: '' });
+const errors = ref({});
+const message = ref('');
+const show = ref(false);
+const loading = ref(false);
+const info = ref({});
+onMounted(async () => {
+    try {
+        info.value = (await api.get('/app-info')).data.data || {};
+    } catch {
+        /* opsional */
+    }
+});
 
-function fill(e, p) {
-  email.value = e;
-  password.value = p;
-}
 async function submit() {
-  err.value = '';
-  loading.value = true;
-  try {
-    await auth.login(email.value, password.value);
-    router.push(route.query.redirect || '/');
-  } catch (e) {
-    err.value = e.response?.data?.message || e.response?.data?.errors?.email?.[0] || 'Login gagal. Periksa email & password.';
-  } finally {
-    loading.value = false;
-  }
+    loading.value = true;
+    errors.value = {};
+    message.value = '';
+    try {
+        const data = await auth.login(form.email.trim(), form.password);
+        toast.success(`Om Swastyastu, ${data.user.name.split(' ')[0]}!`);
+        const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/';
+        router.replace(redirect);
+    } catch (e) {
+        errors.value = fieldErrors(e);
+        message.value = errors.value.email || errors.value.password ? '' : errorMessage(e, 'Gagal masuk. Coba lagi.');
+        form.password = '';
+    } finally {
+        loading.value = false;
+    }
+}
+function fillDemo(type) {
+    form.email = type === 'admin' ? 'admin@ruangdharma.id' : 'user@ruangdharma.id';
+    form.password = type === 'admin' ? 'admin123' : 'user123';
 }
 </script>
+
+<template>
+    <div class="animate-fade-up">
+        <span class="eyebrow"><Icon name="sparkles" class="h-3.5 w-3.5" /> Studio internal</span>
+        <h1 class="mt-5 font-display text-4xl font-bold">Om Swastyastu 🙏</h1>
+        <p class="mt-2 text-muted">Masuk untuk lanjut membuat video cerita dharma.</p>
+
+        <div v-if="message" class="mt-6 flex items-start gap-3 rounded-2xl border-2 border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300" role="alert">
+            <Icon name="circle-alert" class="mt-0.5 h-4 w-4" />
+            <span>{{ message }}</span>
+        </div>
+
+        <form class="mt-8 space-y-5" novalidate @submit.prevent="submit">
+            <div>
+                <label class="label" for="email">Email</label>
+                <div class="relative">
+                    <Icon name="mail" class="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted" />
+                    <input id="email" v-model="form.email" type="email" class="input pl-11" :class="{ 'input-error': errors.email }" autocomplete="username" placeholder="nama@ruangdharma.id" required autofocus />
+                </div>
+                <p v-if="errors.email" class="field-error">{{ errors.email }}</p>
+            </div>
+            <div>
+                <label class="label" for="password">Password</label>
+                <div class="relative">
+                    <Icon name="lock-keyhole" class="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted" />
+                    <input id="password" v-model="form.password" :type="show ? 'text' : 'password'" class="input pr-12 pl-11" :class="{ 'input-error': errors.password }" autocomplete="current-password" required />
+                    <button type="button" class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg p-1.5 text-muted hover:text-ink" :aria-label="show ? 'Sembunyikan password' : 'Tampilkan password'" @click="show = !show">
+                        <Icon :name="show ? 'eye-off' : 'eye'" class="h-4 w-4" />
+                    </button>
+                </div>
+                <p v-if="errors.password" class="field-error">{{ errors.password }}</p>
+            </div>
+            <button v-ripple type="submit" class="btn btn-primary btn-lg shine w-full" :disabled="loading || !form.email || !form.password">
+                <Spinner v-if="loading" class="h-5 w-5" />
+                <Icon v-else name="log-in" class="h-5 w-5" />
+                {{ loading ? 'Memeriksa…' : 'Masuk' }}
+            </button>
+        </form>
+
+        <div v-if="info.show_demo_accounts" class="mt-8 rounded-2xl border-2 border-dashed border-line p-4">
+            <p class="text-xs font-bold text-muted">Akun demo — hanya tampil di mode lokal</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+                <button type="button" class="chip" @click="fillDemo('admin')"><Icon name="crown" class="h-3.5 w-3.5" /> Admin</button>
+                <button type="button" class="chip" @click="fillDemo('user')"><Icon name="user" class="h-3.5 w-3.5" /> Pengguna</button>
+            </div>
+        </div>
+    </div>
+</template>

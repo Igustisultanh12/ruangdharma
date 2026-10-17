@@ -14,16 +14,23 @@ class MuseService
         if ($raw !== null && $raw !== '') {
             try { return decrypt($raw); } catch (\Throwable) { return $raw; }
         }
-        return $envFallback ?: null;
+        return static::usableSecret($envFallback);
     }
-    public function getApiToken(): ?string { return $this->settingDecrypted('muse_api_token', env('MUSE_API_TOKEN')); }
-    public function getWebhookSecret(): ?string { return $this->settingDecrypted('muse_webhook_secret', env('MUSE_WEBHOOK_SECRET')); }
-    public function getBaseUrl(): string { return (string) (Setting::get('muse_base_url', env('MUSE_BASE_URL', '')) ?: ''); }
-    public function getTimeout(): int { return (int) (Setting::get('muse_timeout', (string) env('MUSE_TIMEOUT', 15)) ?: 15); }
+    /** Abaikan nilai kosong / placeholder contoh (mis. "change-me-...") agar tidak bisa dipakai sebagai token. */
+    public static function usableSecret(?string $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '' || str_starts_with(strtolower($value), 'change-me') || strlen($value) < 16) return null;
+        return $value;
+    }
+    public function getApiToken(): ?string { return $this->settingDecrypted('muse_api_token', config('services.muse.token')); }
+    public function getWebhookSecret(): ?string { return $this->settingDecrypted('muse_webhook_secret', config('services.muse.webhook_secret')); }
+    public function getBaseUrl(): string { return (string) (Setting::get('muse_base_url', config('services.muse.base_url', '')) ?: ''); }
+    public function getTimeout(): int { return (int) (Setting::get('muse_timeout', (string) config('services.muse.timeout', 15)) ?: 15); }
     public function getConfigSource(): string
     {
         if (Setting::get('muse_api_token')) return 'database';
-        if (env('MUSE_API_TOKEN')) return 'env';
+        if (static::usableSecret(config('services.muse.token'))) return 'env';
         return 'none';
     }
     public function testConnection(): array
@@ -74,15 +81,25 @@ class MuseService
     {
         $given = $headerToken ?: $bearer;
         if (!$given) return false;
-        foreach ([$this->getApiToken(), env('MUSE_API_TOKEN')] as $expected) {
+        foreach ([$this->getApiToken(), static::usableSecret(config('services.muse.token'))] as $expected) {
             if ($expected && hash_equals($expected, $given)) return true;
+        }
+        return false;
+    }
+    /** Verifikasi header X-Muse-Signature = HMAC-SHA256(raw body, MUSE_WEBHOOK_SECRET) (boleh berawalan "sha256="). */
+    public function verifyWebhookSignature(?string $signature, string $rawBody): bool
+    {
+        if (!$signature) return false;
+        $signature = preg_replace('/^sha256=/i', '', trim($signature));
+        foreach ([$this->getWebhookSecret(), static::usableSecret(config('services.muse.webhook_secret'))] as $secret) {
+            if ($secret && hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature)) return true;
         }
         return false;
     }
     public function verifyWebhookSecret(?string $given): bool
     {
         if (!$given) return false;
-        foreach ([$this->getWebhookSecret(), env('MUSE_WEBHOOK_SECRET')] as $expected) {
+        foreach ([$this->getWebhookSecret(), static::usableSecret(config('services.muse.webhook_secret'))] as $expected) {
             if ($expected && hash_equals($expected, $given)) return true;
         }
         return false;

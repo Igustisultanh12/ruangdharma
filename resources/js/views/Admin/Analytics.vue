@@ -1,123 +1,82 @@
-<template>
-  <div>
-    <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Analitik</h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400">Performa studio 30 hari terakhir.</p>
-      </div>
-      <button @click="exportCsv" class="btn-secondary btn-sm">Ekspor Analitik CSV</button>
-    </div>
-
-    <div class="grid sm:grid-cols-3 gap-4 mb-4">
-      <StatCard title="Total Video (30 hari)" :value="items.length" subtitle="Dari data yang dimuat" />
-      <StatCard title="Pengguna Aktif" :value="topUsers.length" subtitle="Yang pernah generate" tone="emerald" />
-      <StatCard title="Kata Kunci Teratas" :value="topKeywords[0]?.keyword || '-'" :subtitle="topKeywords[0] ? `${topKeywords[0].count} video` : ''" tone="amber" />
-    </div>
-
-    <div class="card mb-4">
-      <h2 class="font-bold text-slate-900 dark:text-white mb-4">Video per Hari (30 Hari)</h2>
-      <BarChart :data="last30" />
-    </div>
-
-    <div class="grid lg:grid-cols-2 gap-4">
-      <div class="card">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-3">Top Kata Kunci</h2>
-        <ol class="space-y-2">
-          <li v-for="(k, i) in topKeywords" :key="k.keyword" class="flex items-center gap-3 text-sm">
-            <span class="w-6 text-slate-400 font-semibold">{{ i + 1 }}.</span>
-            <span class="flex-1 font-medium">{{ k.keyword }}</span>
-            <span class="badge badge-violet">{{ k.count }} video</span>
-          </li>
-          <li v-if="!topKeywords.length" class="text-sm text-slate-500">Belum ada data.</li>
-        </ol>
-      </div>
-      <div class="card">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-3">Top Pengguna</h2>
-        <ol class="space-y-2">
-          <li v-for="(u, i) in topUsers" :key="u.name" class="flex items-center gap-3 text-sm">
-            <span class="w-6 text-slate-400 font-semibold">{{ i + 1 }}.</span>
-            <span class="flex-1 font-medium">{{ u.name }}</span>
-            <span class="badge badge-info">{{ u.count }} video</span>
-          </li>
-          <li v-if="!topUsers.length" class="text-sm text-slate-500">Belum ada data.</li>
-        </ol>
-      </div>
-      <div class="card">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-4">Distribusi Model</h2>
-        <DonutChart :data="modelDonut" />
-      </div>
-      <div class="card">
-        <h2 class="font-bold text-slate-900 dark:text-white mb-4">Distribusi Durasi</h2>
-        <div class="space-y-3">
-          <div v-for="d in durationBars" :key="d.label">
-            <div class="flex justify-between text-sm mb-1"><span>{{ d.label }}</span><span class="font-semibold">{{ d.value }} video</span></div>
-            <div class="progress-track"><div class="progress-bar" :style="{ width: d.pct + '%' }"></div></div>
-          </div>
-          <p v-if="!durationBars.length" class="text-sm text-slate-500">Belum ada data.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 <script setup>
-import { computed, onMounted, ref } from 'vue';
-import Swal from 'sweetalert2';
-import api from '../../services/api.js';
-import StatCard from '../../components/StatCard.vue';
-import BarChart from '../../components/BarChart.vue';
-import DonutChart from '../../components/DonutChart.vue';
+import { computed, ref, watch } from 'vue';
+import BarChart from '@/components/charts/BarChart.vue';
+import DonutChart from '@/components/charts/DonutChart.vue';
+import HBarList from '@/components/charts/HBarList.vue';
+import Icon from '@/components/ui/Icon.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Segmented from '@/components/ui/Segmented.vue';
+import StatCard from '@/components/ui/StatCard.vue';
+import api, { errorMessage } from '@/lib/api.js';
+import { modelHex, workflowHex } from '@/lib/colors.js';
+import { downloadFromApi } from '@/lib/download.js';
+import { date, isoDate, modelLabel, WORKFLOW } from '@/lib/format.js';
+import { toast } from '@/lib/toast.js';
+import { useRealtime } from '@/composables/useRealtime.js';
 
-const items = ref([]);
-const MODEL_LABELS = { narasi: 'Narasi', ngobrol: 'Ngobrol', gabungan: 'Gabungan' };
-const MODEL_COLORS = { narasi: '#7c3aed', ngobrol: '#f59e0b', gabungan: '#0ea5e9' };
-
-const last30 = computed(() => {
-  const out = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    out.push({ label: d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }), value: items.value.filter((g) => (g.created_at || '').slice(0, 10) === key).length });
-  }
-  return out;
-});
-function groupBy(list, keyFn) {
-  const map = {};
-  list.forEach((g) => { const k = keyFn(g); if (k) map[k] = (map[k] || 0) + 1; });
-  return Object.entries(map).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-}
-const topKeywords = computed(() => groupBy(items.value, (g) => g.keyword).slice(0, 10).map((x) => ({ keyword: x.name, count: x.count })));
-const topUsers = computed(() => groupBy(items.value, (g) => g.user?.name || `User #${g.user_id}`).slice(0, 10).map((x) => ({ name: x.name, count: x.count })));
-const modelDonut = computed(() => ['narasi', 'ngobrol', 'gabungan'].map((m) => ({ label: MODEL_LABELS[m], value: items.value.filter((g) => g.model === m).length, color: MODEL_COLORS[m] })));
-const durationBars = computed(() => {
-  const total = items.value.length || 1;
-  return [30, 60, 90].map((d) => {
-    const value = items.value.filter((g) => Number(g.durasi) === d).length;
-    return { label: `${d} detik`, value, pct: Math.round((value / total) * 100) };
-  });
-});
-function exportCsv() {
-  const rows = [['Tanggal', 'Kata Kunci', 'Model', 'Durasi', 'Pengguna']];
-  items.value.forEach((g) => rows.push([g.created_at || '', g.keyword, g.model, g.durasi, g.user?.name || '']));
-  const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'analitik-ruang-dharma.csv';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  Swal.fire({ icon: 'success', title: 'Analitik diekspor', timer: 1200, showConfirmButton: false });
-}
-onMounted(async () => {
-  // Ambil beberapa halaman riwayat admin agar analitik lebih lengkap (maks 3 halaman).
-  const all = [];
-  for (let p = 1; p <= 3; p++) {
+const days = ref(30);
+const d = ref(null);
+const showTable = ref(false);
+async function load() {
     try {
-      const { data } = await api.get('/admin/generations', { params: { page: p } });
-      all.push(...(data.data || []));
-      if (p >= (data.last_page || 1)) break;
-    } catch { break; }
-  }
-  items.value = all;
-});
+        d.value = (await api.get('/admin/analytics', { params: { days: days.value } })).data.data;
+    } catch (e) {
+        toast.error(errorMessage(e));
+    }
+}
+watch(days, load, { immediate: true });
+useRealtime(['all_generations', 'users'], load);
+
+const series = computed(() => (d.value?.per_day || []).map((r) => ({ label: date(r.date, { day: 'numeric', month: 'short' }), title: date(r.date, { weekday: 'long', day: 'numeric', month: 'long' }), value: r.total, date: r.date })));
+const labelEvery = computed(() => (days.value <= 14 ? 1 : days.value <= 30 ? 5 : 15));
+const models = computed(() => ['narasi', 'ngobrol', 'gabungan'].map((k) => ({ label: modelLabel(k), value: Number(d.value?.by_model?.[k] || 0), color: modelHex[k] })));
+const workflow = computed(() => Object.keys(WORKFLOW).map((k) => ({ label: WORKFLOW[k].label, value: Number(d.value?.by_workflow_status?.[k] || 0), color: workflowHex[k] })).filter((r) => r.value));
+const durasi = computed(() => [30, 60, 90].map((k) => ({ label: `${k} detik`, value: Number(d.value?.by_durasi?.[k] || 0) })));
+const keywords = computed(() => (d.value?.top_keywords || []).map((k) => ({ label: k.keyword, value: k.total })));
+const users = computed(() => (d.value?.top_users || []).map((u) => ({ label: u.user?.name || 'Pengguna terhapus', sub: u.user?.email, value: u.total })));
+const perDayAvg = computed(() => (d.value ? (d.value.total / d.value.days).toFixed(1) : '0'));
+const exportCsv = () => downloadFromApi('/admin/analytics/export-csv', 'analitik-video.csv', { date_from: isoDate(new Date(Date.now() - (days.value - 1) * 864e5)), date_to: isoDate() });
 </script>
+
+<template>
+    <div>
+        <PageHeader title="Analitik" description="Tren produksi video, gaya yang paling sering dipakai, dan tema favorit tim.">
+            <template #actions>
+                <Segmented v-model="days" :options="[{ value: 7, label: '7 hari' }, { value: 14, label: '14 hari' }, { value: 30, label: '30 hari' }, { value: 90, label: '90 hari' }]" />
+                <button type="button" class="btn btn-secondary" @click="exportCsv"><Icon name="file-spreadsheet" class="h-4 w-4" /> Ekspor CSV</button>
+            </template>
+        </PageHeader>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard :label="`Video ${days} hari`" :value="d?.total ?? 0" icon="clapperboard" color="violet" :hint="`rata-rata ${perDayAvg} per hari`" :loading="!d" />
+            <StatCard label="Rata-rata durasi" :value="d ? `${d.avg_durasi} dtk` : '—'" icon="timer" color="orange" :loading="!d" />
+            <StatCard label="Pengguna aktif" :value="d?.active_users ?? 0" icon="users" color="emerald" :hint="`dari ${d?.total_users ?? 0} akun`" :loading="!d" />
+            <StatCard label="Tema berbeda" :value="keywords.length" icon="lightbulb" color="amber" hint="10 teratas ditampilkan" :loading="!d" />
+        </div>
+
+        <div class="card mt-6 p-6">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h2 class="font-display text-lg font-bold">Video per hari</h2>
+                    <p class="text-sm text-muted">{{ days }} hari terakhir</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" @click="showTable = !showTable"><Icon :name="showTable ? 'chart-column' : 'table'" class="h-4 w-4" /> {{ showTable ? 'Lihat grafik' : 'Lihat tabel' }}</button>
+            </div>
+            <div v-if="!showTable" class="mt-4"><BarChart :rows="series" :label-every="labelEvery" :height="250" /></div>
+            <div v-else class="table-wrap mt-4 max-h-80 overflow-y-auto rounded-2xl border border-line">
+                <table class="table"><thead><tr><th>Tanggal</th><th class="text-right">Video</th></tr></thead><tbody><tr v-for="r in [...series].reverse()" :key="r.date"><td>{{ r.title }}</td><td class="text-right font-bold tabular-nums">{{ r.value }}</td></tr></tbody></table>
+            </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div class="card p-6"><h2 class="mb-4 font-display text-lg font-bold">Gaya penyampaian</h2><DonutChart :rows="models" center-label="Video" :size="140" /></div>
+            <div class="card p-6"><h2 class="mb-4 font-display text-lg font-bold">Tahap review</h2><DonutChart :rows="workflow" center-label="Video" :size="140" /></div>
+            <div class="card p-6"><h2 class="mb-4 font-display text-lg font-bold">Durasi</h2><HBarList :rows="durasi" color="#f97316" unit="video" /></div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div class="card p-6"><h2 class="mb-4 font-display text-lg font-bold">Tema terpopuler</h2><HBarList :rows="keywords" unit="video" /></div>
+            <div class="card p-6"><h2 class="mb-4 font-display text-lg font-bold">Pembuat paling aktif</h2><HBarList :rows="users" color="#0ea5e9" unit="video" /></div>
+        </div>
+    </div>
+</template>
