@@ -5,6 +5,7 @@ import CanangLoader from '@/components/brand/CanangLoader.vue';
 import CanangMark from '@/components/brand/CanangMark.vue';
 import GenerationModal from '@/components/generation/GenerationModal.vue';
 import PhonePreview from '@/components/generation/PhonePreview.vue';
+import BacksoundPicker from '@/components/BacksoundPicker.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Segmented from '@/components/ui/Segmented.vue';
@@ -36,6 +37,7 @@ const tab = ref('naskah');
 const detailId = ref(null);
 const sending = ref(false);
 const viaMuse = ref(false);
+const backsound = ref({ url: '', volume: 20, trimStart: 0, trimEnd: null });
 const museGen = ref(null); // VideoGeneration status waiting_muse / processing / completed / failed
 
 // Cara 2 — status job Muse ikut terbarui realtime (tanpa polling manual / refresh).
@@ -80,7 +82,7 @@ async function generate() {
     step.value = 0;
     const ticker = setInterval(() => step.value < STEPS.length - 1 && step.value++, 650);
     try {
-        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value }), wait(STEPS.length * 650)]);
+        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd }), wait(STEPS.length * 650)]);
         step.value = STEPS.length - 1;
         await wait(350);
         result.value = res.data.result;
@@ -102,7 +104,7 @@ async function generateViaMuse() {
     error.value = null;
     result.value = null;
     try {
-        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, via_muse: true });
+        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, via_muse: true, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd });
         museGen.value = data.generation;
         rt.pulseNow();
     } catch (e) {
@@ -177,6 +179,8 @@ function download() {
                         </button>
                     </div>
                 </div>
+
+                <BacksoundPicker v-model="backsound" />
 
                 <label class="flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-3 transition" :class="viaMuse ? 'border-ink bg-sky-50 shadow-brutal-sm dark:bg-sky-500/10' : 'border-line hover:border-violet-300'">
                     <input v-model="viaMuse" type="checkbox" class="checkbox mt-0.5" />

@@ -18,6 +18,7 @@ class VideoGeneration extends Model
         'status', 'source', 'muse_job_id', 'video_url', 'video_files',
         'is_favorite', 'is_archived',
         'workflow_status', 'review_note', 'reviewed_by', 'reviewed_at', 'publish_at',
+        'backsound_url', 'backsound_volume', 'backsound_trim_start', 'backsound_trim_end', 'has_subtitle', 'has_watermark',
     ];
     protected $casts = [
         'naskah' => 'array', 'prompts' => 'array', 'durasi' => 'integer',

@@ -62,6 +62,8 @@ class VideoGenerationController extends Controller
                 'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'],
                 'naskah' => [], 'caption' => 'Menunggu Muse — video sedang dibuat...', 'prompts' => [],
                 'status' => 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft',
+                'backsound_url' => $data['backsound_url'] ?? null, 'backsound_volume' => $data['backsound_volume'] ?? 20,
+                'backsound_trim_start' => $data['backsound_trim_start'] ?? 0, 'backsound_trim_end' => $data['backsound_trim_end'] ?? null,
             ]);
             ActivityLogger::fromRequest($request, 'generate', "Generate via Muse: {$keyword} ({$data['model']}, {$data['durasi']}s) — job #{$job->id} queued", ['generation_id' => $g->id, 'muse_job_id' => $job->id]);
             NotificationService::notify($user, 'Job dikirim ke Muse', "Job #{$job->id} untuk \"{$keyword}\" menunggu Muse membuat videonya.");
@@ -77,6 +79,8 @@ class VideoGenerationController extends Controller
             'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'],
             'naskah' => $result['naskah'], 'caption' => $result['caption'], 'prompts' => $result['prompts'],
             'status' => 'completed', 'source' => 'local', 'workflow_status' => 'draft',
+            'backsound_url' => $data['backsound_url'] ?? null, 'backsound_volume' => $data['backsound_volume'] ?? 20,
+            'backsound_trim_start' => $data['backsound_trim_start'] ?? 0, 'backsound_trim_end' => $data['backsound_trim_end'] ?? null,
         ]);
 
         ActivityLogger::fromRequest($request, 'generate', "Generate video: {$keyword} ({$data['model']}, {$data['durasi']}s)", ['generation_id' => $g->id]);
