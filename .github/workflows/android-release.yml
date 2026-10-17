@@ -51,7 +51,7 @@ jobs:
       - name: Run tests
         run: |
           set +e
-          php artisan test --compact 2>&1 | tee "$RUNNER_TEMP/phpunit.log"
+          vendor/bin/phpunit --colors=never 2>&1 | tee "$RUNNER_TEMP/phpunit.log"
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             # Ringkasan kegagalan sebagai anotasi (terbaca tanpa membuka log).
