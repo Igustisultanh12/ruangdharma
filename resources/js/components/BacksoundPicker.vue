@@ -18,7 +18,10 @@ const selectedFileName = ref('');
 const selectedFileSize = ref('');
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a', 'ogg'];
 
-// Durasi acuan trim: durasi audio yang dipilih/di-upload kalau diketahui, fallback 60 (durasi video default).
+// Durasi acuan trim: durasi AUDIO PENUH yang dipilih/di-upload kalau
+// diketahui (probe metadata / duration_sec server), fallback 60.
+// TrimTimeline memakai durasi audio penuh ini, bukan durasi video,
+// supaya segmen bisa dipilih dari tengah lagu yang lebih panjang.
 const duration = ref(60);
 const effEnd = computed(() => local.value.trimEnd ?? duration.value);
 
@@ -58,6 +61,21 @@ function probeDuration(f) {
     } catch { resolve(null); }
   });
 }
+// Probe durasi audio dari URL file yang dipilih (file_url): baca metadata
+// Audio element. Dipakai saat backsound dari daftar tidak punya duration_sec.
+function probeUrlDuration(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return; }
+    try {
+      const a = new Audio();
+      a.preload = 'metadata';
+      const t = setTimeout(() => resolve(null), 10000);
+      a.onloadedmetadata = () => { clearTimeout(t); resolve(a.duration && isFinite(a.duration) ? a.duration : null); };
+      a.onerror = () => { clearTimeout(t); resolve(null); };
+      a.src = url;
+    } catch { resolve(null); }
+  });
+}
 
 function sync() { emit('update:modelValue', { ...local.value }); }
 async function load() {
@@ -86,12 +104,25 @@ async function upload(e) {
     const { data } = await api.post('/backsounds', fd); toast.success(data.message); name.value = ''; await load();
   } catch (err) { toast.error(errorMessage(err)); } finally { uploading.value = false; e.target.value = ''; }
 }
-function pick(bs) {
+async function pick(bs) {
   local.value.url = bs.file_url; local.value.name = bs.name;
-  if (bs.duration_sec) duration.value = bs.duration_sec;
+  // Pakai duration_sec server bila ada, kalau tidak probe dari file_url.
+  if (bs.duration_sec) {
+    duration.value = bs.duration_sec;
+  } else {
+    const probed = await probeUrlDuration(bs.file_url);
+    duration.value = probed ? Math.max(1, Math.round(probed)) : 60;
+  }
   clampTrim(); sync(); toast.success(`Backsound "${bs.name}" dipilih.`);
 }
-onMounted(load);
+onMounted(async () => {
+  await load();
+  // Audio sudah terpilih sebelumnya (mis. edit): probe durasi dari file_url.
+  if (local.value.url) {
+    const probed = await probeUrlDuration(local.value.url);
+    if (probed) { duration.value = Math.max(1, Math.round(probed)); clampTrim(); sync(); }
+  }
+});
 </script>
 <template>
   <div class="card p-4 space-y-3">
@@ -108,15 +139,19 @@ onMounted(load);
     </div>
     <div class="space-y-2">
       <label class="text-sm">Volume: {{ local.volume }}%<input v-model.number="local.volume" type="range" min="0" max="100" class="w-full" @input="sync" /><span class="text-xs text-muted">20% = pelan di bawah narasi, 0 = tanpa backsound</span></label>
-      <!-- Trim timeline ala CapCut: tarik handle kiri/kanan -->
+      <!-- Trim timeline ala CapCut: tarik handle kiri/kanan.
+           :duration = durasi AUDIO penuh (probe / duration_sec).
+           :audio-src + :volume = untuk Play Preview segmen terpilih. -->
       <TrimTimeline
         :duration="duration"
         :start="local.trimStart ?? 0"
         :end="local.trimEnd"
+        :audio-src="local.url"
+        :volume="local.volume"
         @update:start="(v) => { local.trimStart = v; clampTrim(); sync(); }"
         @update:end="(v) => { local.trimEnd = v; clampTrim(); sync(); }"
       />
     </div>
-    <p class="text-xs text-muted">Di server, backsound dipotong / di-loop agar pas durasi video ({{ duration }} dtk), lalu dicampur di bawah suara narasi/dialog dengan ffmpeg: <code>volume={{ (local.volume/100).toFixed(2) }}</code>.</p>
+    <p class="text-xs text-muted">Trim di atas memakai durasi AUDIO penuh ({{ duration }} dtk). Di server, backsound dipotong / di-loop agar pas durasi video, lalu dicampur di bawah suara narasi/dialog dengan ffmpeg: <code>volume={{ (local.volume/100).toFixed(2) }}</code>.</p>
   </div>
 </template>

@@ -1,13 +1,23 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 
 // Trim timeline ala CapCut: satu bar dengan 2 handle drag (kiri/kanan).
-// Props: duration (total detik), start (detik), end (detik, null = habis/duration).
+// Props: duration = DURASI AUDIO PENUH (detik) — BUKAN durasi video —
+//   supaya user bisa memilih segmen dari tengah-tengah lagu yang jauh
+//   lebih panjang dari video (mis. menit 2:30–3:30 dari lagu gamelan).
+//   Parent mem-probe durasi audio asli (metadata Audio element /
+//   duration_sec server) dan mengirimnya lewat prop ini. Selama durasi
+//   audio belum diketahui, parent fallback ke durasi video.
+//   start (detik), end (detik, null = habis/duration).
+//   audioSrc = URL audio untuk preview play (backsoundUrl / file_url).
+//   volume = 0–100, dipakai preview agar user bisa cek kerasnya.
 // Emit: update:start (number), update:end (number | null — null kalau end == duration).
 const props = defineProps({
   duration: { type: Number, required: true },
   start: { type: Number, default: 0 },
   end: { type: [Number, null], default: null },
+  audioSrc: { type: String, default: '' },
+  volume: { type: Number, default: 20 },
 });
 const emit = defineEmits(['update:start', 'update:end']);
 
@@ -83,6 +93,85 @@ function onEndNum(e) {
   if (isNaN(v)) return;
   emit('update:end', v >= total.value ? null : round01(Math.min(Math.max(v, effStart.value + MIN_SEG), total.value)));
 }
+
+// ---------- PLAY PREVIEW ----------
+// Preview memutar segmen terpilih (start..end) dari file audio penuh
+// dengan volume yang sedang dipilih, agar user bisa memastikan:
+// (a) audio mulai diputar dari mana, (b) sampai mana, (c) seberapa keras.
+const isPlaying = ref(false);
+const playPos = ref(0); // posisi playhead saat ini (detik)
+let previewAudio = null; // HTMLAudioElement, dibuat sekali & dipakai ulang
+let previewSrc = '';
+
+function ensurePreviewAudio() {
+  if (previewAudio) return previewAudio;
+  const audio = new Audio();
+  audio.preload = 'auto';
+  // Berhenti OTOMATIS saat mencapai end: pakai timeupdate listener.
+  audio.addEventListener('timeupdate', () => {
+    playPos.value = audio.currentTime;
+    if (audio.currentTime >= effEnd.value) {
+      stopPreview();
+    }
+  });
+  audio.addEventListener('ended', () => { stopPreview(); });
+  previewAudio = audio;
+  return audio;
+}
+
+function stopPreview() {
+  // Pause + kembalikan currentTime ke start (siap diputar ulang).
+  isPlaying.value = false;
+  if (previewAudio) {
+    try { previewAudio.pause(); } catch { /* abaikan */ }
+    previewAudio.currentTime = effStart.value;
+  }
+  playPos.value = effStart.value;
+}
+
+async function togglePreview() {
+  if (isPlaying.value) { stopPreview(); return; }
+  if (!props.audioSrc) return;
+  const audio = ensurePreviewAudio();
+  try {
+    if (previewSrc !== props.audioSrc) {
+      previewSrc = props.audioSrc;
+      audio.src = props.audioSrc;
+    }
+    audio.currentTime = effStart.value;
+    audio.volume = Math.min(Math.max(Number(props.volume) || 0, 0), 100) / 100;
+    playPos.value = effStart.value;
+    isPlaying.value = true;
+    await audio.play();
+  } catch {
+    // Autoplay ditolak / file gagal dimuat: kembalikan tombol ke Play.
+    isPlaying.value = false;
+  }
+}
+
+// Ganti audio -> hentikan preview lama, playhead kembali ke start.
+watch(() => props.audioSrc, () => {
+  stopPreview();
+  previewSrc = '';
+  if (previewAudio) { try { previewAudio.removeAttribute('src'); } catch { /* abaikan */ } }
+});
+// Volume slider berubah saat preview jalan -> terapkan langsung.
+watch(() => props.volume, (v) => {
+  if (previewAudio && isPlaying.value) {
+    previewAudio.volume = Math.min(Math.max(Number(v) || 0, 0), 100) / 100;
+  }
+});
+// Trim berubah saat preview jalan -> mulai lagi dari start baru.
+watch(effStart, () => {
+  if (isPlaying.value && previewAudio) {
+    previewAudio.currentTime = effStart.value;
+    playPos.value = effStart.value;
+  }
+});
+onUnmounted(() => {
+  if (previewAudio) { try { previewAudio.pause(); } catch { /* abaikan */ } }
+  previewAudio = null;
+});
 </script>
 
 <template>
@@ -91,6 +180,24 @@ function onEndNum(e) {
     <div class="flex justify-between items-baseline text-xs">
       <span class="font-semibold">Trim: {{ segLen.toFixed(1) }}s</span>
       <span class="text-muted">{{ fmtMMSS(effStart) }} — {{ fmtMMSS(effEnd) }} / {{ fmtMMSS(total) }}</span>
+    </div>
+
+    <!-- Tombol PLAY PREVIEW: putar segmen terpilih dari audio penuh -->
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm"
+        :disabled="!audioSrc"
+        :title="audioSrc ? 'Putar segmen terpilih (preview)' : 'Upload audio dulu'"
+        @click="togglePreview"
+      >
+        {{ isPlaying ? '■ Stop' : '▶ Play Preview' }}
+      </button>
+      <span v-if="isPlaying" class="text-xs text-muted">
+        Memutar {{ fmtMMSS(effStart) }} — {{ fmtMMSS(effEnd) }} (volume {{ volume }}%) • {{ fmtMMSS(playPos) }}
+      </span>
+      <span v-else-if="!audioSrc" class="text-xs text-muted">Upload audio dulu untuk preview.</span>
+      <span v-else class="text-xs text-muted">Preview memakai volume {{ volume }}%.</span>
     </div>
 
     <!-- Timeline -->
@@ -123,6 +230,13 @@ function onEndNum(e) {
         :style="{ left: pct(effStart) + '%', width: pct(effEnd) - pct(effStart) + '%' }"
       ></div>
 
+      <!-- Playhead preview: garis vertikal yang bergerak selama preview -->
+      <div
+        v-if="isPlaying"
+        class="absolute top-0 bottom-0 z-20 w-0.5 bg-red-500"
+        :style="{ left: pct(playPos) + '%' }"
+      ></div>
+
       <!-- Handle KIRI -->
       <div
         class="absolute top-0 bottom-0 z-10 flex items-center justify-center rounded-l-md bg-white shadow"
@@ -152,7 +266,7 @@ function onEndNum(e) {
       </div>
     </div>
 
-    <p class="text-xs text-muted">Tarik handle kiri/kanan untuk potong. Klik di timeline untuk pindahkan handle terdekat.</p>
+    <p class="text-xs text-muted">Tarik handle kiri/kanan untuk potong. Klik di timeline untuk pindahkan handle terdekat. Timeline memakai durasi audio penuh, jadi segmen bisa diambil dari tengah lagu.</p>
 
     <!-- Angka kecil tersinkron (sekunder, bukan interaksi utama) -->
     <div class="grid grid-cols-2 gap-2">
