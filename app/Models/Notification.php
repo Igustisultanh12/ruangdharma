@@ -11,5 +11,11 @@ class Notification extends Model
     protected $fillable = ['user_id', 'title', 'message', 'is_read'];
     protected $casts = ['is_read' => 'boolean', 'created_at' => 'datetime'];
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
+
+    /** Setiap notifikasi baru juga dikirim sebagai push ke HP pemiliknya (bila FCM sudah diatur admin). */
+    protected static function booted(): void
+    {
+        static::created(fn (self $n) => \App\Support\PushNotifier::notification($n));
+    }
     public function markAsRead(): static { $this->update(['is_read' => true]); return $this->fresh(); }
 }

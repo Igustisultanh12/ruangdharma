@@ -26,10 +26,30 @@ jobs:
       - name: Check mobile API endpoints exist in routes
         run: |
           set -euo pipefail
-          for route in "login" "generations" "social/stats" "social/publish" "muse-config/token-usage" "backsounds"; do
+          for route in "login" "generations" "social/stats" "social/publish" "muse-config/token-usage" "backsounds" "notifications" "mobile/config" "push-token"; do
             grep -q "$route" routes/api.php || { echo "Missing route: $route"; exit 1; }
           done
           echo "All mobile API routes present."
+
+  # Uji fitur Laravel lengkap (PHPUnit). Tidak memblokir build Android — hasilnya untuk verifikasi backend.
+  backend-phpunit:
+    name: Backend feature tests (PHPUnit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo_sqlite, sqlite3, openssl, fileinfo, gd
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Run tests
+        run: php artisan test
 
   android:
     name: Android build & unit tests

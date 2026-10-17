@@ -284,4 +284,36 @@ class AppFlowTest extends TestCase
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($up->json('file_path'));
         $this->assertTrue(\App\Models\MediaAsset::where('user_id', $this->user()->id)->where('type', 'video')->exists());
     }
+
+    public function test_push_token_registration_and_admin_push_config(): void
+    {
+        // Konfigurasi publik untuk aplikasi Android: belum ada kredensial → push null, tidak error.
+        $this->getJson('/api/mobile/config')->assertOk()->assertJsonPath('push', null)->assertJsonPath('push_enabled', false);
+
+        Sanctum::actingAs($this->user());
+        $token = str_repeat('fcmTokenAbc123_', 4);
+        $this->postJson('/api/push-token', ['token' => $token, 'device_name' => 'Pixel'])->assertOk();
+        $this->postJson('/api/push-token', ['token' => $token])->assertOk(); // idempoten
+        $this->assertSame(1, \App\Models\DeviceToken::count());
+        // Notifikasi baru tetap tersimpan walau push belum aktif (tidak melempar error).
+        \App\Services\NotificationService::notify($this->user(), 'Video via Muse selesai', 'Video "Karma" sudah jadi.');
+        $this->postJson('/api/push-test')->assertStatus(422);
+        $this->deleteJson('/api/push-token', ['token' => $token])->assertOk();
+        $this->assertSame(0, \App\Models\DeviceToken::count());
+
+        // Pengguna biasa tidak boleh membuka pengaturan push.
+        $this->getJson('/api/admin/push-config')->assertForbidden();
+
+        Sanctum::actingAs($this->admin());
+        $this->getJson('/api/admin/push-config')->assertOk()->assertJsonPath('data.ready', false)->assertJsonPath('data.package', 'id.ruangdharma.studio');
+        $gs = json_encode([
+            'project_info' => ['project_id' => 'rd-studio', 'project_number' => '123456'],
+            'client' => [['client_info' => ['mobilesdk_app_id' => '1:123456:android:abc', 'android_client_info' => ['package_name' => 'id.ruangdharma.studio']], 'api_key' => [['current_key' => 'AIzaTest']]]],
+        ]);
+        $this->postJson('/api/admin/push-config', ['google_services' => $gs])->assertOk()->assertJsonPath('data.client_project', 'rd-studio');
+        $this->getJson('/api/mobile/config')->assertOk()->assertJsonPath('push.project_id', 'rd-studio')->assertJsonPath('push.sender_id', '123456');
+        $this->postJson('/api/admin/push-config', ['google_services' => '{"project_info":{},"client":[]}'])->assertStatus(422);
+        $this->postJson('/api/admin/push-config', ['service_account' => '{"type":"user"}'])->assertStatus(422)->assertJsonValidationErrors('service_account');
+        $this->postJson('/api/admin/push-config', ['clear' => true])->assertOk()->assertJsonPath('data.client_project', null);
+    }
 }

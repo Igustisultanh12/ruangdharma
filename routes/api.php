@@ -22,6 +22,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10
 Route::post('/register', [AuthController::class, 'register'])->middleware(['auth:sanctum', 'role:admin,super_admin']);
 
 Route::get('/app-info', [SettingController::class, 'publicInfo']);
+Route::get('/mobile/config', [\App\Http\Controllers\PushController::class, 'mobileConfig']);
 
 // ---------- Templates (public) ----------
 Route::get('/templates', [TemplateController::class, 'index']);
@@ -58,6 +59,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Realtime pulse (polling ringan, lihat RealtimeController)
     Route::get('/realtime/pulse', [RealtimeController::class, 'pulse']);
+    // Notifikasi push HP (FCM)
+    Route::post('/push-token', [\App\Http\Controllers\PushController::class, 'register']);
+    Route::delete('/push-token', [\App\Http\Controllers\PushController::class, 'unregister']);
+    Route::post('/push-test', [\App\Http\Controllers\PushController::class, 'test'])->middleware('throttle:10,1');
     Route::post('/profile/password', [ProfileController::class, 'updatePassword']);
 
     // Generate / riwayat
@@ -136,6 +141,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/muse/status', [MuseController::class, 'status']);
 
         // Settings (umum + per tab)
+        Route::get('/push-config', [\App\Http\Controllers\PushController::class, 'adminShow']);
+        Route::post('/push-config', [\App\Http\Controllers\PushController::class, 'adminUpdate']);
         Route::get('/settings', [SettingController::class, 'index']);
         Route::get('/settings/{tab}', [SettingController::class, 'getByTab']);
         Route::put('/settings', [SettingController::class, 'update']);

@@ -218,3 +218,35 @@ fun statusLabel(status: String): String = when (status) {
     "draft" -> "Draf"
     else -> status
 }
+
+/* ---------------- Notifikasi ---------------- */
+
+data class AppNotification(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("is_read") val isRead: Boolean = false,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+/** GET /notifications → {success, unread_count, data: Paginator<AppNotification>} */
+data class NotificationsResponse(
+    @SerializedName("success") val success: Boolean = true,
+    @SerializedName("unread_count") val unreadCount: Int = 0,
+    @SerializedName("data") val data: Paginator<AppNotification>? = null
+)
+
+/** GET /mobile/config → konfigurasi klien Firebase dari server (diunggah admin). */
+data class MobileConfig(
+    @SerializedName("push") val push: PushConfig? = null,
+    @SerializedName("push_enabled") val pushEnabled: Boolean = false
+)
+
+data class PushConfig(
+    @SerializedName("api_key") val apiKey: String? = null,
+    @SerializedName("app_id") val appId: String? = null,
+    @SerializedName("project_id") val projectId: String? = null,
+    @SerializedName("sender_id") val senderId: String? = null
+) {
+    val isComplete: Boolean get() = !apiKey.isNullOrBlank() && !appId.isNullOrBlank() && !projectId.isNullOrBlank() && !senderId.isNullOrBlank()
+}

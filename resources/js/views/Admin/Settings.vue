@@ -6,6 +6,7 @@ import Segmented from '@/components/ui/Segmented.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import TagsInput from '@/components/ui/TagsInput.vue';
 import Toggle from '@/components/ui/Toggle.vue';
+import PushSettings from '@/components/admin/PushSettings.vue';
 import api, { errorMessage, fieldErrors } from '@/lib/api.js';
 import { toast } from '@/lib/toast.js';
 import { useRealtime } from '@/composables/useRealtime.js';
@@ -70,9 +71,10 @@ async function save() {
 <template>
     <div class="mx-auto max-w-4xl">
         <PageHeader title="Pengaturan" description="Atur identitas studio, batas kuota, kata terlarang, generate otomatis, dan keamanan." />
-        <Segmented v-model="tab" :options="[{ value: 'general', label: 'Umum', icon: 'settings' }, { value: 'auto_generate', label: 'Generate otomatis', icon: 'calendar-clock' }, { value: 'security', label: 'Keamanan', icon: 'shield-check' }, { value: 'notifications', label: 'Template notifikasi', icon: 'bell' }]" class="mb-5" />
+        <Segmented v-model="tab" :options="[{ value: 'general', label: 'Umum', icon: 'settings' }, { value: 'auto_generate', label: 'Generate otomatis', icon: 'calendar-clock' }, { value: 'security', label: 'Keamanan', icon: 'shield-check' }, { value: 'notifications', label: 'Template notifikasi', icon: 'bell' }, { value: 'push', label: 'Push HP', icon: 'smartphone' }]" class="mb-5" />
 
-        <div v-if="loading" class="skeleton h-96 rounded-3xl"></div>
+        <PushSettings v-if="tab === 'push'" />
+        <div v-else-if="loading" class="skeleton h-96 rounded-3xl"></div>
         <form v-else class="card space-y-6 p-6" @submit.prevent="save" @input="dirty = true" @change="dirty = true">
             <template v-if="tab === 'general'">
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">

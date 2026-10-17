@@ -34,6 +34,7 @@ fun ProfileScreen(
     onToggleDark: () -> Unit,
     onOpenMuse: (() -> Unit)?,
     onLogout: () -> Unit,
+    notificationCard: @Composable () -> Unit = {},
 ) {
     val c = Rd.colors
     var confirm by remember { mutableStateOf(false) }
@@ -86,6 +87,8 @@ fun ProfileScreen(
                 Icon(Icons.Filled.ChevronRight, null, tint = c.muted)
             }
         }
+
+        notificationCard()
 
         SecondaryButton("Keluar", { confirm = true }, icon = Icons.Filled.Logout, danger = true, modifier = Modifier.fillMaxWidth())
         Text("Ruang Dharma Studio v${BuildConfig.VERSION_NAME} · @ruangdharma_", fontSize = 11.sp, color = c.muted, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)

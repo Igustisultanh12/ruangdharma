@@ -1,12 +1,17 @@
 package id.ruangdharma.studio
 
 import android.graphics.Color as AColor
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
@@ -49,6 +54,9 @@ import com.google.gson.JsonObject
 import id.ruangdharma.studio.data.api.RetrofitClient
 import id.ruangdharma.studio.data.api.TokenStore
 import id.ruangdharma.studio.data.model.*
+import id.ruangdharma.studio.notify.NotificationHelper
+import id.ruangdharma.studio.notify.NotificationSync
+import id.ruangdharma.studio.notify.PushManager
 import id.ruangdharma.studio.ui.components.*
 import id.ruangdharma.studio.ui.screens.*
 import id.ruangdharma.studio.ui.theme.*
@@ -61,10 +69,20 @@ import retrofit2.Response
 import java.io.IOException
 
 class MainActivity : ComponentActivity() {
+    /** Layar yang diminta dibuka dari ketukan notifikasi (mis. "notifications"). */
+    private val openRequest = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { RuangDharmaApp() }
+        openRequest.value = intent?.getStringExtra(NotificationHelper.EXTRA_OPEN)
+        setContent { RuangDharmaApp(openRequest.value) { openRequest.value = null } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(NotificationHelper.EXTRA_OPEN)?.let { openRequest.value = it }
     }
 }
 
@@ -117,7 +135,7 @@ private val NAV = listOf(
 )
 
 @Composable
-fun RuangDharmaApp() {
+fun RuangDharmaApp(openRequest: String? = null, onOpenHandled: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -151,6 +169,10 @@ fun RuangDharmaApp() {
     var usageError by remember { mutableStateOf<String?>(null) }
 
     var detailGen by remember { mutableStateOf<Generation?>(null) }
+    var notifItems by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
+    var notifLoading by remember { mutableStateOf(false) }
+    var unread by remember { mutableIntStateOf(0) }
+    var pushActive by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var submitResult by remember { mutableStateOf<SubmitResult?>(null) }
     var ideaKeyword by remember { mutableStateOf("") }
@@ -163,7 +185,10 @@ fun RuangDharmaApp() {
         token = null; user = null; quota = null; counts = null
         generations = emptyList(); historyItems = emptyList(); socialStats = emptyMap(); socialPublishes = emptyList()
         tokenUsage = null; detailGen = null; submitResult = null
+        notifItems = emptyList(); unread = 0; pushActive = false
         loginError = message
+        NotificationSync.cancel(context)
+        NotificationHelper.reset(context)
         scope.launch { TokenStore.save(context, null) }
     }
 
@@ -172,6 +197,14 @@ fun RuangDharmaApp() {
         RetrofitClient.create(context, onUnauthorized = {
             mainHandler.post { if (token != null) clearSession("Sesi berakhir. Silakan login kembali.") }
         }) { token }
+    }
+
+    // Izin notifikasi Android 13+ (seperti SISINDEN: diminta setelah login).
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) toast("Izin notifikasi ditolak. Aktifkan di Profil → Notifikasi HP agar notifikasi muncul.")
+    }
+    fun requestNotifPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && !NotificationHelper.hasPermission(context)) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     // Warna ikon status bar mengikuti mode terang/gelap aplikasi.
@@ -234,6 +267,17 @@ fun RuangDharmaApp() {
             else usageError = parseServerError(r.code(), try { r.errorBody()?.string() } catch (_: Exception) { null }, "Gagal memuat")
         } catch (e: Exception) { usageError = networkMessage(e) }
     }
+    suspend fun loadNotifications() {
+        if (notifItems.isEmpty()) notifLoading = true
+        try {
+            val r = api.notifications()
+            if (r.isSuccessful) r.body()?.let { notifItems = it.data?.items.orEmpty(); unread = it.unreadCount }
+        } catch (_: Exception) { }
+        notifLoading = false
+    }
+    suspend fun syncSystemNotifications() {
+        try { NotificationSync.run(context, api) } catch (_: Exception) { }
+    }
     suspend fun reloadGenerations() { loadGenerations(); loadHistory(); loadCounts(); loadDetail() }
 
     // 1) Pulihkan sesi tersimpan saat app dibuka (tidak perlu login ulang), validasi lewat /me.
@@ -261,7 +305,13 @@ fun RuangDharmaApp() {
         launch { loadQuota() }
         launch { loadSocial() }
         launch { loadUsage() }
+        // Notifikasi HP: penanda awal, sinkron latar belakang, push FCM, izin Android 13+.
+        launch { loadNotifications(); syncSystemNotifications() }
+        NotificationSync.schedule(context)
+        launch { pushActive = PushManager.setup(context, api) }
+        requestNotifPermission()
         var stamps: Map<String, String>? = null
+        var lastUnread = -1
         var tick = 0
         while (isActive && token != null) {
             delay(5000)
@@ -271,6 +321,13 @@ fun RuangDharmaApp() {
                 val p = r.body() ?: continue
                 if (!p.active) { clearSession("Akun dinonaktifkan. Hubungi admin."); break }
                 p.quota?.let { quota = it }
+                if (p.unread != lastUnread) {
+                    // Ada notifikasi baru/dibaca → bunyikan banner di bilah status & segarkan daftar.
+                    if (lastUnread >= 0) syncSystemNotifications()
+                    lastUnread = p.unread
+                    unread = p.unread
+                    loadNotifications()
+                }
                 val now = p.stamps.orEmpty()
                 val old = stamps
                 if (old != null) {
@@ -329,6 +386,10 @@ fun RuangDharmaApp() {
         }
 
         val nav = rememberNavController()
+        // Ketukan notifikasi di bilah status → buka layar Notifikasi.
+        LaunchedEffect(openRequest) {
+            if (openRequest == "notifications") { nav.navigate("notifications") { launchSingleTop = true }; onOpenHandled() }
+        }
         val backStack by nav.currentBackStackEntryAsState()
         val route = backStack?.destination?.route ?: "home"
         fun go(r: String) {
@@ -369,7 +430,7 @@ fun RuangDharmaApp() {
                     }
                 }
             },
-            topBar = { if (route != "detail") TopBar(user, onProfile = { go("profile") }) },
+            topBar = { if (route != "detail" && route != "notifications") TopBar(user, unread, onProfile = { go("profile") }, onBell = { nav.navigate("notifications") { launchSingleTop = true } }) },
             bottomBar = { if (route != "detail") BottomBar(route, ::go) },
         ) { pad ->
             NavHost(nav, "home", Modifier.padding(pad).fillMaxSize().background(c.surface)) {
@@ -463,6 +524,16 @@ fun RuangDharmaApp() {
                         onToast = ::toast,
                     )
                 }
+                composable("notifications") {
+                    LaunchedEffect(Unit) { loadNotifications(); NotificationHelper.cancelAll(context) }
+                    NotificationsScreen(
+                        items = notifItems, unread = unread, loading = notifLoading,
+                        onRefresh = { scope.launch { loadNotifications() } },
+                        onRead = { n -> scope.launch { try { api.readNotification(n.id) } catch (_: Exception) { }; loadNotifications() } },
+                        onReadAll = { scope.launch { try { toast(api.readAllNotifications().message("Semua notifikasi ditandai dibaca.")) } catch (e: Exception) { toast(networkMessage(e)) }; loadNotifications() } },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
                 composable("muse") {
                     LaunchedEffect(Unit) { loadUsage() }
                     Column {
@@ -474,8 +545,24 @@ fun RuangDharmaApp() {
                     ProfileScreen(
                         user = user, quota = quota, dark = dark, onToggleDark = toggleDark,
                         onOpenMuse = if (user?.isAdmin == true) ({ nav.navigate("muse") }) else null,
+                        notificationCard = {
+                            NotificationSettingsCard(
+                                pushActive = pushActive,
+                                onRequestPermission = ::requestNotifPermission,
+                                onTestPush = {
+                                    scope.launch {
+                                        if (pushActive) {
+                                            try { toast(api.pushTest().message("Notifikasi tes dikirim.")) } catch (e: Exception) { toast(networkMessage(e)) }
+                                        } else {
+                                            NotificationHelper.showPushed(context, (System.currentTimeMillis() / 1000).toInt(), "Tes notifikasi Ruang Dharma", "Notifikasi HP berhasil. Om Swastyastu 🙏", force = true)
+                                        }
+                                    }
+                                },
+                            )
+                        },
                         onLogout = {
                             scope.launch {
+                                PushManager.unregister(context, api)
                                 try { api.logout() } catch (_: Exception) { }
                                 clearSession()
                             }
@@ -501,7 +588,7 @@ private fun Splash() {
 
 /** Padanan components/layout/Topbar.vue versi ponsel. */
 @Composable
-private fun TopBar(user: User?, onProfile: () -> Unit) {
+private fun TopBar(user: User?, unread: Int, onProfile: () -> Unit, onBell: () -> Unit) {
     val c = Rd.colors
     val infinite = rememberInfiniteTransition(label = "live")
     val a by infinite.animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "a")
@@ -519,7 +606,17 @@ private fun TopBar(user: User?, onProfile: () -> Unit) {
                 Spacer(Modifier.width(6.dp))
                 Text("Live", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = tone("emerald").fg)
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onBell), contentAlignment = Alignment.Center) {
+                Icon(if (unread > 0) Icons.Filled.NotificationsActive else Icons.Filled.Notifications, "Notifikasi", tint = c.ink, modifier = Modifier.size(22.dp))
+                if (unread > 0) {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 2.dp).clip(RoundedCornerShape(999.dp))
+                            .background(Color(0xFFF43F5E)).border(2.dp, c.card, RoundedCornerShape(999.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
+                    ) { Text(if (unread > 99) "99+" else unread.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold) }
+                }
+            }
+            Spacer(Modifier.width(6.dp))
             Box(Modifier.clickable(onClick = onProfile)) { Avatar(user?.name ?: "RD", 38.dp) }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))

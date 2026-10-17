@@ -1,4 +1,24 @@
-# RUANGDHARMA Android v1.1.1 (versionCode 3)
+# RUANGDHARMA Android v1.2.0 (versionCode 4)
+
+## Baru: notifikasi HP seperti SISINDEN 🔔
+- Notifikasi muncul di bilah status HP (bersuara & bergetar) saat **video Muse selesai / gagal / terunggah, naskah perlu review / revisi / disetujui, dan ada komentar baru**.
+- Tiga kanal yang bisa diatur di Pengaturan Android: *Status video*, *Review & komentar*, *Notifikasi studio*.
+- **Push instan (Firebase)** walau aplikasi ditutup — aktif setelah admin mengunggah `google-services.json` + service account di web: **Pengaturan → Push HP**. Tidak perlu build ulang APK.
+- Tanpa Firebase pun notifikasi tetap muncul: dicek otomatis saat aplikasi terbuka dan ±15 menit di latar belakang (WorkManager).
+- Ikon lonceng dengan jumlah belum dibaca di atas; layar **Notifikasi** (Semua / Belum dibaca, tandai dibaca).
+- Ketuk notifikasi di bilah status → langsung membuka layar Notifikasi.
+- Profil → **Notifikasi HP**: izin, aktif/nonaktif, suara & getar, kirim notifikasi tes.
+- Android 13+: aplikasi meminta izin notifikasi setelah login.
+
+## Server (wajib setelah pull)
+```
+php artisan migrate --force   # tabel device_tokens
+npm run build                 # halaman Pengaturan → Push HP
+```
+
+---
+
+## Dari v1.1.1
 
 ## Perbaikan
 - **Riwayat / Beranda gagal dimuat** dengan pesan `NumberFormatException: Expected an int but was 3.1 … estimasi_detik`. Data dari Muse kadang berisi angka desimal, angka sebagai teks, 1/0 untuk ya/tidak, atau objek di kolom teks — sekarang semuanya dibaca dengan toleran, sehingga satu nilai aneh tidak lagi menggagalkan seluruh daftar.
@@ -35,4 +55,4 @@ Semua menu terbarui otomatis tanpa refresh (memantau `/api/realtime/pulse` tiap 
 Tidak ada migrasi. Aplikasi memakai API yang sudah ada di `https://ruangdharma.my.id/api`.
 
 ## Install
-Unduh `RUANGDHARMA-1.1.1.apk` di bawah, izinkan "Instal aplikasi tidak dikenal", lalu pasang (menimpa versi sebelumnya). Login dengan akun Ruang Dharma.
+Unduh `RUANGDHARMA-1.2.0.apk` di bawah, izinkan "Instal aplikasi tidak dikenal", lalu pasang (menimpa versi sebelumnya). Login dengan akun Ruang Dharma.

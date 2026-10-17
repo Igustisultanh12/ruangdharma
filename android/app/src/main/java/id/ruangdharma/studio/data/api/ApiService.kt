@@ -72,4 +72,26 @@ interface ApiService {
         @Part("name") name: RequestBody,
         @Part file: MultipartBody.Part
     ): Response<JsonObject>
+
+    // ---------- Notifikasi ----------
+    @GET("notifications")
+    suspend fun notifications(@Query("per_page") perPage: Int = 30): Response<NotificationsResponse>
+
+    @POST("notifications/{id}/read")
+    suspend fun readNotification(@Path("id") id: Int): Response<JsonObject>
+
+    @POST("notifications/read-all")
+    suspend fun readAllNotifications(): Response<JsonObject>
+
+    @GET("mobile/config")
+    suspend fun mobileConfig(): Response<MobileConfig>
+
+    @POST("push-token")
+    suspend fun registerPush(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<JsonObject>
+
+    @HTTP(method = "DELETE", path = "push-token", hasBody = true)
+    suspend fun unregisterPush(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<JsonObject>
+
+    @POST("push-test")
+    suspend fun pushTest(): Response<JsonObject>
 }
