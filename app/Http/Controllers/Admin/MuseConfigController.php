@@ -2,7 +2,9 @@
 namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Services\ActivityLogger;
 use App\Services\MuseService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -30,7 +32,8 @@ class MuseConfigController extends Controller {
         return $this->decryptValue($raw) ?: (env('MUSE_WEBHOOK_SECRET') ?: null);
     }
 
-    public function show(Request $request, MuseService $muse) {
+    public function show(Request $request, MuseService $muse) { return $this->get($request, $muse); }
+    public function get(Request $request, MuseService $muse) {
         $show = $request->boolean('show');
         $token = $this->currentToken();
         $secret = $this->currentSecret();
@@ -52,10 +55,12 @@ class MuseConfigController extends Controller {
         ]);
     }
 
-    public function generateToken() {
+    public function generateToken(Request $request) {
         $plain = bin2hex(random_bytes(32)); // 64 karakter hex
         Setting::setValue('muse_api_token', encrypt($plain));
         Setting::setValue('muse_api_token_updated_at', now()->toIso8601String());
+        ActivityLogger::fromRequest($request, 'muse.token', 'Admin generate token Muse baru.');
+        NotificationService::notify($request->user(), 'Token Muse dibuat', 'Token Muse baru berhasil dibuat. Token lama sudah tidak berlaku.');
         return response()->json([
             'message' => 'Token Muse baru berhasil dibuat. Token lama langsung tidak berlaku.',
             'muse_api_token' => $plain,
@@ -63,11 +68,12 @@ class MuseConfigController extends Controller {
         ], 201);
     }
 
-    public function generateWebhookSecret() {
+    public function generateWebhookSecret(Request $request) {
         // Pastikan secret selalu beda dari token
         do { $plain = bin2hex(random_bytes(32)); } while ($plain === $this->currentToken());
         Setting::setValue('muse_webhook_secret', encrypt($plain));
         Setting::setValue('muse_webhook_secret_updated_at', now()->toIso8601String());
+        ActivityLogger::fromRequest($request, 'muse.webhook_secret', 'Admin generate webhook secret Muse baru.');
         return response()->json([
             'message' => 'Webhook secret baru berhasil dibuat. Secret lama langsung tidak berlaku.',
             'muse_webhook_secret' => $plain,

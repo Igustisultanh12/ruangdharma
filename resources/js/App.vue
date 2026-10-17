@@ -1,25 +1,26 @@
 <template>
   <div class="min-h-screen">
-    <header class="bg-violet-700 text-white px-4 py-3 flex justify-between items-center">
-      <RouterLink to="/" class="font-bold text-lg">🛕 Ruang Dharma Studio</RouterLink>
-      <nav class="flex gap-3 text-sm items-center">
-        <template v-if="auth.user">
-          <RouterLink to="/generate">Generate</RouterLink>
-          <RouterLink to="/history">Riwayat</RouterLink>
-          <RouterLink v-if="auth.user.role==='admin'" to="/admin">Admin</RouterLink>
-          <RouterLink to="/profile">{{ auth.user.name }}</RouterLink>
-          <button @click="logout" class="bg-white text-violet-700 px-3 py-1 rounded">Logout</button>
-        </template>
-        <RouterLink v-else to="/login">Login</RouterLink>
-      </nav>
-    </header>
-    <main class="max-w-6xl mx-auto p-4"><RouterView /></main>
+    <AppLayout v-if="isLoggedIn">
+      <RouterView />
+    </AppLayout>
+    <div v-else class="min-h-screen bg-gradient-to-br from-violet-700 via-violet-600 to-amber-500 flex items-center justify-center px-4 py-10">
+      <div class="w-full max-w-md">
+        <RouterView />
+      </div>
+    </div>
   </div>
 </template>
 <script setup>
+import { computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from './stores/auth.js';
-import { useRouter } from 'vue-router';
-const auth = useAuthStore(); const router = useRouter();
+import { useUiStore } from './stores/ui.js';
+import AppLayout from './layouts/AppLayout.vue';
+
+const auth = useAuthStore();
+const ui = useUiStore();
+const route = useRoute();
 auth.loadFromStorage();
-async function logout(){ await auth.logout(); router.push('/login'); }
+const isLoggedIn = computed(() => !!auth.token && route.name !== 'login');
+onMounted(() => ui.initDark());
 </script>

@@ -6,6 +6,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(web: __DIR__.'/../routes/web.php', api: __DIR__.'/../routes/api.php', commands: __DIR__.'/../routes/console.php', health: '/up')
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->api(prepend: [\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class]);
-        $middleware->alias(['role' => \App\Http\Middleware\EnsureRole::class]);
+        $middleware->alias([
+            'role' => \App\Http\Middleware\EnsureRole::class,
+            'permission' => \App\Http\Middleware\EnsurePermission::class,
+            'api.key' => \App\Http\Middleware\ApiKeyAuth::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {})->create();

@@ -10,6 +10,27 @@ User masukkan kata kunci (misal "Rwa Bhineda"), pilih durasi (30/60/90 detik) da
 - Generate: validasi limit harian (global + per-user) + kata diblokir, ScriptGeneratorService dengan knowledge base (Canang Sari aturan bunga, Tri Sandhya, Karma, dll), aturan wajib Om Swastyastu / Om Santi Santi Santi Om, tanpa kata roh/penunggu
 - Integrasi Muse: `GET /api/muse/status`, `POST /api/muse/generate`, `GET /api/muse/jobs/{id}`, `POST /api/muse/webhook`, `GET /api/muse/health`. Lihat `docs/MUSE_INTEGRATION.md`.
 
+## Daftar Modul Lengkap
+- **Generate Video** — kata kunci + durasi + model (narasi / ngobrol / gabungan), naskah 6 bagian + prompt visual + caption Instagram
+- **Template Library** — template naskah siap pakai (Tri Sandhya, Canang Sari, Karma, dll)
+- **Favorit** — tandai hasil generate sebagai favorit untuk dipakai lagi
+- **Review Queue (Admin)** — admin meninjau hasil generate: setujui, minta revisi, atau tolak beserta alasannya
+- **Versioning** — setiap edit naskah menyimpan versi baru; riwayat versi bisa dilihat & dipulihkan
+- **Komentar** — diskusi per hasil generate
+- **Media Library** — kelola aset media (gambar/video) yang dipakai di konten
+- **Kalender Konten (Content Calendar)** — jadwalkan konten per tanggal & jam tayang
+- **Analitik** — statistik generate, pengguna aktif, dan pemakaian kuota
+- **Paket / Quota Plans** — paket limit harian (misal Gratis / Pro) dan penugasan paket ke pengguna
+- **API Keys** — kunci API untuk integrasi eksternal (key hanya ditampilkan sekali saat dibuat)
+- **Webhooks** — webhook keluar ke URL eksternal + log pengiriman (Webhook Logs)
+- **Role & Permissions** — role admin/pengguna + permission per fitur
+- **Log** — Activity Logs (jejak aktivitas pengguna) & Login History (riwayat login)
+- **Notifikasi** — notifikasi dalam aplikasi untuk pengguna
+- **Auto Generate Harian** — command `app:generate-daily` + cron/scheduler, 3 video per hari dengan rotasi model
+- **Dark Mode** — tema gelap/terang, tersimpan di preferensi pengguna
+- **Ekspor** — ekspor riwayat generate (Excel/CSV)
+- **Pengaturan** — limit global, kata diblokir, tema auto-generate, konfigurasi Muse (token via Admin, tanpa edit .env)
+
 ## Akun Demo (Seeder)
 - Admin: `admin@ruangdharma.id` / `admin123`
 - Pengguna: `user@ruangdharma.id` / `user123`
@@ -682,3 +703,57 @@ chmod -R 775 storage bootstrap/cache
 - `app/Services/QuotaService.php` — cek kuota
 - `resources/js/` — Vue 3 SPA (router + pinia)
 - `docs/MUSE_INTEGRATION.md` — dokumentasi API Muse
+
+## Auto-Generate Harian & Cron aaPanel
+
+`app:generate-daily` membuat 3 video dari tema di settings (`auto_generate_themes`,
+default: Rwa Bhineda, Canang Sari, Tri Sandhya) dengan rotasi model
+narasi → ngobrol → gabungan, untuk user admin pertama yang aktif.
+Aktifkan di Admin > Pengaturan tab `auto_generate`
+(`auto_generate_enabled=1`, `auto_generate_time` HH:MM, default 07:00).
+
+```bash
+php artisan app:generate-daily                 # jalan manual
+php artisan app:generate-daily --dry-run       # lihat rencana saja
+php artisan app:generate-daily --themes="Karma" --themes="Nyepi"
+```
+
+Scheduler Laravel (`routes/console.php`) menjadwalkan command ini setiap hari
+pada jam dari settings. Agar scheduler jalan, tambahkan **satu** cron di
+aaPanel (Scheduled Tasks / Cron) yang memanggil scheduler tiap menit:
+
+```bash
+* * * * * cd /www/wwwroot/ruangdharma && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Alternatif tanpa scheduler (langsung tiap hari jam 07:00):
+
+```bash
+0 7 * * * cd /www/wwwroot/ruangdharma && php artisan app:generate-daily >> storage/logs/generate-daily.log 2>&1
+```
+
+Setelah menambah migration baru, jalankan `php artisan migrate --force`.
+
+## Endpoint Baru (ringkas)
+
+- `GET /api/templates` — katalog template/ide video.
+- `POST /api/generations/{id}/toggle-favorite`, `POST /toggle-archive` — favorit & arsip.
+- `GET /api/generations?search=&model=&date_from=&date_to=&sort=latest|oldest&favorites=1&archived=` — search & filter riwayat.
+- `GET /api/admin/export/csv`, `GET /api/admin/export/pdf` (HTML siap print) — ekspor laporan.
+- `GET /api/admin/activity-logs`, `GET /api/admin/login-histories` — log aktivitas & login.
+- `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
+- `GET /api/generations/calendar?month=YYYY-MM`, `POST /api/generations/{id}/schedule-publish`.
+- Workflow: `submit-review`, `approve`, `reject` (catatan), `publish`, `archive`.
+- Versi: `PUT /api/generations/{id}/naskah` (snapshot otomatis), `GET .../versions`, `POST .../versions/{v}/restore`.
+- Komentar: `GET|POST /api/generations/{id}/comments`, `DELETE .../comments/{commentId}`.
+- Media: `GET|POST /api/media` (max 10MB), `DELETE /api/media/{id}`.
+- Role & Permission: `GET|POST|PUT|DELETE /api/admin/roles`, `POST /api/admin/roles/{id}/permissions`,
+  `POST /api/admin/users/{id}/roles`, `GET /api/admin/permissions`. Middleware `permission:xxx`.
+- Kuota & Paket: `GET|POST|PUT|DELETE /api/admin/quota-plans`, `POST /api/admin/users/{id}/quota-plan`.
+- API Keys & Webhooks: `GET|POST|DELETE /api/api-keys`, `GET|POST|PUT|DELETE /api/webhooks`,
+  `POST /api/webhooks/{id}/test`, `GET /api/webhooks/{id}/logs`. Eksternal: header `X-Api-Key`.
+- Analitik: `GET /api/admin/analytics?days=30`, `GET /api/admin/analytics/export-csv`.
+- Settings per tab: `GET|PUT /api/admin/settings/{tab}` (general, muse, auto_generate, security, notifications).
+- Semua respons JSON konsisten: `{success, message, data, ...}` (kecuali MuseConfig yang
+  mempertahankan bentuk lama agar frontend Admin/MuseConfig.vue tetap jalan, dan
+  `download-txt` yang mengembalikan `text/plain`).
