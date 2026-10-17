@@ -112,8 +112,9 @@ onMounted(async () => {
   } catch { /* abaikan */ }
   try {
     const { data } = await api.get('/generations', { params: { page: 1 } });
-    items.value = data.data || data || [];
-    totalCount.value = data.total ?? items.value.length;
+    const pag = data?.data && Array.isArray(data.data.data) ? data.data : null;
+    items.value = pag ? (pag.data || []) : (Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []));
+    totalCount.value = pag?.total ?? data?.total ?? items.value.length;
   } catch { /* abaikan */ }
 });
 </script>

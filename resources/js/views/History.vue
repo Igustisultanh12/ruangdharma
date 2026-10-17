@@ -119,7 +119,7 @@
             <div v-for="v in versions" :key="v.id" class="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5">
               <div>
                 <p class="font-medium text-sm">{{ v.label }} <span v-if="v.id === activeVersionId" class="ml-1"><Badge variant="success">Aktif</Badge></span></p>
-                <p class="text-xs text-slate-500">{{ formatDate(v.created_at) }} • {{ v.naskah.length }} bagian naskah</p>
+                <p class="text-xs text-slate-500">{{ formatDate(v.created_at) }} • {{ (v.naskah || []).length }} bagian naskah</p>
               </div>
               <button @click="restoreVersion(v)" class="btn-secondary btn-sm" :disabled="v.id === activeVersionId">Restore</button>
             </div>
@@ -207,8 +207,8 @@ function isArchived(id) { return archCheck(id); }
 const tabCounts = computed(() => ({ semua: total.value, favorit: getFavorites().length, arsip: getArchived().length }));
 const topComments = computed(() => comments.value.filter((c) => !c.parent_id));
 const activeVersion = computed(() => versions.value.find((v) => v.id === activeVersionId.value) || versions.value[0]);
-const activeNaskah = computed(() => activeVersion.value?.naskah || detail.value?.naskah || []);
-const activeCaption = computed(() => activeVersion.value?.caption ?? detail.value?.caption ?? '');
+const activeNaskah = computed(() => { const n = activeVersion.value?.naskah ?? detail.value?.naskah ?? []; return Array.isArray(n) ? n : []; });
+const activeCaption = computed(() => { const c = activeVersion.value?.caption ?? detail.value?.caption ?? ''; return typeof c === 'string' ? c : (c?.text || ''); });
 
 async function load(p = 1) {
   page.value = p;
@@ -216,7 +216,9 @@ async function load(p = 1) {
   // filter tanggal/model/sort juga diterapkan sisi klien pada halaman yang dimuat.
   const params = { page: p, search: search.value || undefined, model: modelFilter.value || undefined, date_from: dateFrom.value || undefined, date_to: dateTo.value || undefined, sort: sort.value };
   const { data } = await api.get('/generations', { params });
-  let rows = data.data || data || [];
+  // Backend: { success:true, data: paginator{ data:[...], last_page, total } } — jangan pakai paginator sebagai array.
+  const paginator = data?.data && typeof data.data === 'object' && Array.isArray(data.data.data) ? data.data : null;
+  let rows = paginator ? (paginator.data || []) : (Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []));
   if (search.value) rows = rows.filter((g) => (g.keyword || '').toLowerCase().includes(search.value.toLowerCase()));
   if (modelFilter.value) rows = rows.filter((g) => g.model === modelFilter.value);
   if (dateFrom.value) rows = rows.filter((g) => (g.created_at || '').slice(0, 10) >= dateFrom.value);
@@ -225,8 +227,8 @@ async function load(p = 1) {
   if (tab.value === 'favorit') rows = rows.filter((g) => isFavorite(g.id));
   if (tab.value === 'arsip') rows = rows.filter((g) => isArchived(g.id));
   items.value = rows;
-  lastPage.value = data.last_page || 1;
-  total.value = data.total ?? rows.length;
+  lastPage.value = paginator?.last_page || data?.last_page || 1;
+  total.value = paginator?.total ?? data?.total ?? rows.length;
 }
 function setTab(t) {
   tab.value = t;
@@ -275,7 +277,8 @@ async function openDetail(g) {
   detailTab.value = 'detail';
   try {
     const { data } = await api.get(`/generations/${g.id}`);
-    detail.value = data;
+    // Backend: { success:true, data: generation } — unwrap agar detail.value adalah generation, bukan wrapper.
+    detail.value = data?.data || data;
   } catch {
     detail.value = g;
   }

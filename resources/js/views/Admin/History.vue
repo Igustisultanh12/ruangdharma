@@ -77,9 +77,10 @@ const filtered = computed(() => {
 async function load(p = 1) {
   page.value = p;
   const { data } = await api.get('/admin/generations', { params: { page: p } });
-  items.value = data.data || [];
-  lastPage.value = data.last_page || 1;
-  total.value = data.total ?? items.value.length;
+  const pag = data?.data && Array.isArray(data.data.data) ? data.data : null;
+  items.value = pag ? (pag.data || []) : (Array.isArray(data?.data) ? data.data : []);
+  lastPage.value = pag?.last_page || data?.last_page || 1;
+  total.value = pag?.total ?? data?.total ?? items.value.length;
   // Tampilkan hasil filter klien pada halaman yang dimuat.
   const f = filtered.value;
   if (f.length !== items.value.length) items.value = f;
