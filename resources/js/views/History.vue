@@ -132,7 +132,7 @@ const regenerate = (g) => router.push({ path: '/generate', query: { keyword: g.k
                         <tr v-for="g in list.items.value" :key="g.id" class="cursor-pointer" @click="detailId = g.id">
                             <td @click.stop><button type="button" class="rounded-lg p-1.5 transition hover:bg-yellow-100 dark:hover:bg-yellow-400/10" :aria-label="g.is_favorite ? 'Hapus dari favorit' : 'Jadikan favorit'" @click="toggleFav(g)"><Icon name="star" :class="g.is_favorite ? 'fill-yellow-400 text-yellow-500' : 'text-muted'" class="h-4 w-4" /></button></td>
                             <td>
-                                <p class="flex items-center gap-1.5 font-bold">{{ g.keyword }} <Badge v-if="g.video_url" color="sky" icon="film" size="xs">Video</Badge></p>
+                                <p class="flex items-center gap-1.5 font-bold">{{ g.keyword }} <Badge v-if="g.video_url" color="sky" icon="film" size="xs">Video</Badge><Badge v-if="g.muse_profile_name" color="violet" size="xs">{{ g.muse_profile_name }}</Badge></p>
                                 <p class="max-w-xs truncate text-xs text-muted">{{ partText((g.naskah || [])[0]) }}</p>
                             </td>
                             <td><Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge></td>
@@ -160,6 +160,7 @@ const regenerate = (g) => router.push({ path: '/generate', query: { keyword: g.k
                     <h3 class="mt-3 font-display text-lg font-bold">{{ g.keyword }}</h3>
                     <p class="mt-1 line-clamp-3 flex-1 text-sm text-muted">{{ captionText(g.caption).split('\n')[0] }}</p>
                     <div class="mt-4 flex items-center gap-2 text-xs">
+                        <Badge v-if="g.muse_profile_name" color="violet" size="xs">{{ g.muse_profile_name }}</Badge>
                         <Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge>
                         <span class="font-semibold">{{ g.durasi }} dtk</span>
                         <span class="ml-auto text-muted">{{ relative(g.created_at) }}</span>

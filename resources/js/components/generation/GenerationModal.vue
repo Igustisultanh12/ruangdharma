@@ -205,6 +205,7 @@ const download = () => downloadFromApi(`/generations/${props.id}/download-txt`, 
                                         <div v-if="isPendingMuse(g)" class="card p-6">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                           <p class="font-bold">{{ g.status === 'processing' ? 'Muse sedang memproses' : 'Menunggu Muse' }} — job #{{ g.muse_job_id }}</p>
+                          <p v-if="g.muse_profile_name" class="text-sm text-muted">Dikerjakan oleh: <b>{{ g.muse_profile_name }}</b></p>
                           <Badge :color="GEN_STATUS[g.status]?.color || 'sky'" :icon="GEN_STATUS[g.status]?.icon || 'loader-circle'">{{ GEN_STATUS[g.status]?.label || g.status }}</Badge>
                         </div>
                         <p class="mt-1 text-sm text-muted">Video, naskah & caption muncul di sini otomatis setelah Muse mengirim hasilnya. Halaman ini refresh otomatis tiap 5 detik.</p>

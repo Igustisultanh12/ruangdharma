@@ -37,6 +37,18 @@ const tab = ref('naskah');
 const detailId = ref(null);
 const sending = ref(false);
 const viaMuse = ref(false);
+const museProfiles = ref([]);
+const selectedMuseProfile = ref(null);
+async function loadMuseProfiles() {
+    try {
+        const { data } = await api.get('/muse-profiles');
+        museProfiles.value = data.data || [];
+        const def = museProfiles.value.find((p) => p.is_default);
+        if (def) selectedMuseProfile.value = def.id;
+    } catch {
+        museProfiles.value = [];
+    }
+}
 const backsound = ref({ url: '', volume: 20, trimStart: 0, trimEnd: null });
 const museGen = ref(null); // VideoGeneration status waiting_muse / processing / completed / failed
 
@@ -68,7 +80,7 @@ function applyQuery() {
     if (MODELS.some((m) => m.value === q.model)) model.value = String(q.model);
 }
 watch(() => route.query, applyQuery);
-onMounted(applyQuery);
+onMounted(() => { applyQuery(); loadMuseProfiles(); });
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,7 +94,7 @@ async function generate() {
     step.value = 0;
     const ticker = setInterval(() => step.value < STEPS.length - 1 && step.value++, 650);
     try {
-        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd }), wait(STEPS.length * 650)]);
+        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, muse_profile_id: selectedMuseProfile.value || null, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd }), wait(STEPS.length * 650)]);
         step.value = STEPS.length - 1;
         await wait(350);
         result.value = res.data.result;
@@ -104,7 +116,7 @@ async function generateViaMuse() {
     error.value = null;
     result.value = null;
     try {
-        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, via_muse: true, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd });
+        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, via_muse: true, muse_profile_id: selectedMuseProfile.value || null, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd });
         museGen.value = data.generation;
         rt.pulseNow();
     } catch (e) {
@@ -190,6 +202,15 @@ function download() {
                     </span>
                 </label>
 
+                <div v-if="viaMuse">
+                    <label class="label" for="muse-profile">Pilih Muse</label>
+                    <select id="muse-profile" v-model="selectedMuseProfile" class="input">
+                        <option :value="null">Otomatis — profil default</option>
+                        <option v-for="p in museProfiles" :key="p.id" :value="p.id">{{ p.name }}{{ p.is_default ? ' (Default)' : '' }}</option>
+                    </select>
+                    <p class="mt-1 text-xs text-muted">Job ini dikerjakan oleh Muse yang dipilih. Kosongkan (Otomatis) untuk memakai profil default.</p>
+                </div>
+
                 <div class="rounded-2xl bg-surface-2 p-3">
                     <div class="flex items-center justify-between text-sm">
                         <span class="font-semibold">Sisa kuota hari ini</span>
@@ -219,7 +240,7 @@ function download() {
                 <div class="flex flex-wrap items-center gap-4 border-b-2 border-ink bg-sky-300 p-5 text-zinc-900">
                     <span class="grid h-12 w-12 place-items-center rounded-2xl border-2 border-ink bg-white"><Icon :name="museGen.status === 'failed' ? 'circle-x' : 'film'" class="h-6 w-6" /></span>
                     <div class="min-w-0 flex-1">
-                        <p class="text-sm font-bold opacity-80">Job Muse #{{ museGen.muse_job_id }}</p>
+                        <p class="text-sm font-bold opacity-80">Job Muse #{{ museGen.muse_job_id }}<span v-if="museGen.muse_profile_name"> · Dikerjakan oleh {{ museGen.muse_profile_name }}</span></p>
                         <h2 class="font-display text-2xl font-bold">{{ museGen.keyword }}</h2>
                     </div>
                     <Badge :color="GEN_STATUS[museGen.status]?.color || 'slate'" :icon="GEN_STATUS[museGen.status]?.icon">{{ GEN_STATUS[museGen.status]?.label || museGen.status }}</Badge>

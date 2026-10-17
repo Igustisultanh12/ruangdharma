@@ -79,6 +79,68 @@ async function runTest() {
         busy.value = '';
     }
 }
+// ---------- Profil Muse (multi-Muse) ----------
+const profiles = ref([]);
+const profilesLoading = ref(false);
+const showAddProfile = ref(false);
+const profileBusy = ref('');
+const profileTests = ref({});
+const newProfile = reactive({ name: '', description: '' });
+async function loadProfiles() {
+    profilesLoading.value = true;
+    try {
+        profiles.value = (await api.get('/admin/muse-profiles')).data.data || [];
+    } catch (e) {
+        toast.error(errorMessage(e));
+    } finally {
+        profilesLoading.value = false;
+    }
+}
+onMounted(loadProfiles);
+async function addProfile() {
+    if (!newProfile.name.trim()) { toast.error('Nama profil wajib diisi.'); return; }
+    profileBusy.value = 'add';
+    try {
+        const { data } = await api.post('/admin/muse-profiles', { name: newProfile.name.trim(), description: newProfile.description.trim() || null });
+        toast.success(data.message);
+        Object.assign(newProfile, { name: '', description: '' });
+        showAddProfile.value = false;
+        await loadProfiles();
+    } catch (e) {
+        toast.error(errorMessage(e));
+    } finally {
+        profileBusy.value = '';
+    }
+}
+async function profileAction(p, action) {
+    const labels = { 'generate-token': 'Buat token baru untuk profil ini?', 'generate-webhook-secret': 'Buat webhook secret baru untuk profil ini?', 'set-default': `Jadikan "${p.name}" profil default?`, 'toggle-active': p.is_active ? `Nonaktifkan profil "${p.name}"?` : `Aktifkan profil "${p.name}"?`, delete: `Hapus profil "${p.name}"? Job lama yang memakai profil ini tetap ada (profilnya jadi kosong).` };
+    if (['generate-token', 'generate-webhook-secret', 'delete'].includes(action)) {
+        const ok = await confirmDialog({ title: labels[action], message: action === 'delete' ? 'Profil yang dihapus tidak bisa dikembalikan. Token profil ini langsung tidak berlaku.' : 'Nilai lama langsung tidak berlaku.', tone: 'danger', confirmText: 'Ya, lanjutkan', icon: 'key-round' });
+        if (!ok) return;
+    }
+    profileBusy.value = `${action}-${p.id}`;
+    try {
+        let data;
+        if (action === 'delete') {
+            ({ data } = await api.delete(`/admin/muse-profiles/${p.id}`));
+        } else if (action === 'test') {
+            ({ data } = await api.post(`/admin/muse-profiles/${p.id}/test`));
+            profileTests.value = { ...profileTests.value, [p.id]: data.data };
+            toast.success('Tes profil OK — lihat status tersimpan di bawah profil.');
+            return;
+        } else {
+            ({ data } = await api.post(`/admin/muse-profiles/${p.id}/${action}`));
+        }
+        toast.success(data.message);
+        await loadProfiles();
+        await loadTokenUsage();
+    } catch (e) {
+        toast.error(errorMessage(e));
+    } finally {
+        profileBusy.value = '';
+    }
+}
+
 const origin = window.location.origin;
 const tokenShown = computed(() => (revealed.value && cfg.value?.muse_api_token) || cfg.value?.muse_api_token_masked || 'TOKEN_KAMU');
 const curls = computed(() => [
@@ -120,6 +182,24 @@ const curls = computed(() => [
             </table>
           </div>
         </div>
+        <div v-if="tokenUsage?.per_profile?.length" class="mt-6">
+          <p class="text-sm font-bold">Penggunaan token per profil Muse</p>
+          <p class="text-xs text-muted">Job & video yang dikerjakan tiap profil — estimasi 1 token ~ 4 karakter.</p>
+          <div class="mt-2 overflow-x-auto">
+            <table class="table">
+              <thead><tr><th>Profil Muse</th><th>Job</th><th>Video</th><th>Karakter</th><th class="text-right">Token</th></tr></thead>
+              <tbody>
+                <tr v-for="pp in tokenUsage.per_profile" :key="pp.muse_profile_id ?? 'legacy'">
+                  <td class="font-semibold">{{ pp.muse_profile_name }}</td>
+                  <td class="tabular-nums">{{ pp.jobs }}</td>
+                  <td class="tabular-nums">{{ pp.generations }}</td>
+                  <td class="tabular-nums">{{ pp.chars?.toLocaleString('id-ID') }}</td>
+                  <td class="text-right font-bold tabular-nums">{{ pp.tokens?.toLocaleString('id-ID') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         <div v-if="tokenUsage?.daily?.length" class="mt-4">
           <p class="text-sm font-bold">7 hari terakhir</p>
           <div class="mt-2 flex gap-2 overflow-x-auto">
@@ -129,6 +209,55 @@ const curls = computed(() => [
       </div>
 
       <PageHeader title="Integrasi Muse" description="Kelola token API dan webhook untuk Muse langsung dari sini — tanpa mengedit file .env." />
+
+        <div class="card mb-6 p-6">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="font-display text-lg font-bold">Profil Muse</h2>
+                    <p class="mt-1 text-xs text-muted">Web bisa punya lebih dari 1 koneksi Muse. Tiap profil punya token & webhook secret sendiri; saat generate, pilih Muse mana yang mengerjakan job. <b>Jangan paste token di chat — token dibuat di sini.</b> Token utuh tidak pernah ditampilkan; yang terlihat hanya versi masked.</p>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" @click="showAddProfile = !showAddProfile"><Icon name="plus" class="h-4 w-4" /> Tambah Profil</button>
+            </div>
+
+            <form v-if="showAddProfile" class="mt-4 space-y-3 rounded-2xl border-2 border-line p-4" @submit.prevent="addProfile">
+                <div><label class="label" for="pf-name">Nama profil</label><input id="pf-name" v-model="newProfile.name" class="input" maxlength="100" placeholder="mis. Muse Kedua" /></div>
+                <div><label class="label" for="pf-desc">Deskripsi (opsional)</label><input id="pf-desc" v-model="newProfile.description" class="input" maxlength="500" placeholder="mis. Muse di laptop kedua" /></div>
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="profileBusy === 'add'"><Spinner v-if="profileBusy === 'add'" class="h-4 w-4" /> Simpan profil</button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="showAddProfile = false">Batal</button>
+                </div>
+            </form>
+
+            <div v-if="profilesLoading" class="mt-4 text-sm text-muted">Memuat profil…</div>
+            <div v-else-if="!profiles.length" class="mt-4 rounded-2xl bg-surface-2 p-4 text-sm text-muted">Belum ada profil. Tambah profil pertama, atau profil "Muse Utama" dibuat otomatis dari token lama saat halaman ini dibuka.</div>
+            <div v-else class="mt-4 space-y-3">
+                <div v-for="p in profiles" :key="p.id" class="rounded-2xl border-2 border-line p-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <p class="font-bold">{{ p.name }}</p>
+                        <Badge v-if="p.is_default" color="yellow" size="xs" icon="star">Default</Badge>
+                        <Badge :color="p.is_active ? 'emerald' : 'slate'" size="xs">{{ p.is_active ? 'Aktif' : 'Nonaktif' }}</Badge>
+                        <span class="text-xs text-muted">{{ p.jobs_count }} job · terakhir dipakai {{ p.last_used_at ? relative(p.last_used_at) : 'belum pernah' }}</span>
+                    </div>
+                    <p v-if="p.description" class="mt-1 text-xs text-muted">{{ p.description }}</p>
+                    <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                        <div class="rounded-xl bg-surface-2 px-3 py-2"><span class="font-bold">Token:</span> <code class="font-mono">{{ p.api_token_masked || '—' }}</code></div>
+                        <div class="rounded-xl bg-surface-2 px-3 py-2"><span class="font-bold">Webhook secret:</span> <code class="font-mono">{{ p.webhook_secret_masked || '—' }}</code></div>
+                    </div>
+                    <div v-if="profileTests[p.id]" class="mt-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                        <p class="font-bold">Tes: {{ profileTests[p.id].message }}</p>
+                        <p>Token {{ profileTests[p.id].api_token_masked }} · {{ profileTests[p.id].api_token_length }} karakter · format {{ profileTests[p.id].api_token_format }} · {{ profileTests[p.id].jobs_count }} job</p>
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-secondary btn-sm" :disabled="profileBusy === `generate-token-${p.id}`" @click="profileAction(p, 'generate-token')"><Spinner v-if="profileBusy === `generate-token-${p.id}`" class="h-4 w-4" /> Generate Token</button>
+                        <button type="button" class="btn btn-secondary btn-sm" :disabled="profileBusy === `generate-webhook-secret-${p.id}`" @click="profileAction(p, 'generate-webhook-secret')"><Spinner v-if="profileBusy === `generate-webhook-secret-${p.id}`" class="h-4 w-4" /> Generate Webhook Secret</button>
+                        <button v-if="!p.is_default" type="button" class="btn btn-secondary btn-sm" :disabled="profileBusy === `set-default-${p.id}`" @click="profileAction(p, 'set-default')"><Spinner v-if="profileBusy === `set-default-${p.id}`" class="h-4 w-4" /> Set Default</button>
+                        <button type="button" class="btn btn-secondary btn-sm" :disabled="profileBusy === `toggle-active-${p.id}` || (p.is_default && p.is_active)" :title="p.is_default && p.is_active ? 'Profil default tidak bisa dinonaktifkan' : ''" @click="profileAction(p, 'toggle-active')"><Spinner v-if="profileBusy === `toggle-active-${p.id}`" class="h-4 w-4" /> {{ p.is_active ? 'Nonaktifkan' : 'Aktifkan' }}</button>
+                        <button type="button" class="btn btn-secondary btn-sm" :disabled="profileBusy === `test-${p.id}`" @click="profileAction(p, 'test')"><Spinner v-if="profileBusy === `test-${p.id}`" class="h-4 w-4" /> Test</button>
+                        <button type="button" class="btn btn-soft-danger btn-sm" :disabled="profileBusy === `delete-${p.id}`" @click="profileAction(p, 'delete')"><Spinner v-if="profileBusy === `delete-${p.id}`" class="h-4 w-4" /> Hapus</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div v-if="!cfg" class="grid grid-cols-1 gap-6 lg:grid-cols-2"><div v-for="i in 4" :key="i" class="skeleton h-48 rounded-3xl"></div></div>
         <template v-else>
