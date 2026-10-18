@@ -10,6 +10,13 @@ class MuseProfile extends Model
     // Cast 'encrypted': nilai yang disimpan terenkripsi di DB, otomatis didekripsi saat dibaca.
     // Assign nilai PLAINTEXT ke atribut ini — JANGAN assign hasil encrypt() manual (akan terenkripsi ganda).
     protected $casts = ['api_token' => 'encrypted', 'webhook_secret' => 'encrypted', 'is_active' => 'boolean', 'is_default' => 'boolean', 'last_used_at' => 'datetime'];
+    // KEAMANAN (fix kebocoran token): api_token & webhook_secret TIDAK PERNAH ikut
+    // saat model di-serialize ke JSON (mis. relasi museProfile di pendingJobs/showJob).
+    // Cast 'encrypted' hanya mengenkripsi di DB — tanpa $hidden, nilai ter-dekripsi
+    // akan tampil plaintext di JSON. safeArray()/maskedToken()/maskedSecret() membaca
+    // atribut langsung sehingga TIDAK terganggu $hidden. Endpoint reveal() membangun
+    // respons manual dari atribut, jadi tetap bisa mengembalikan nilai utuh.
+    protected $hidden = ['api_token', 'webhook_secret'];
 
     protected static function booted(): void
     {

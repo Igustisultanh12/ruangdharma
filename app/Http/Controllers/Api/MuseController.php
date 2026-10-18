@@ -74,14 +74,25 @@ class MuseController extends Controller
         }
         $jobs = $q->orderBy('created_at')->get();
         $jobs->each(fn (MuseJob $j) => $j->append('muse_profile_name'));
-        return response()->json(['success' => true, 'count' => $jobs->count(), 'data' => $jobs]);
+        // KEAMANAN: jangan pernah kirim relasi museProfile mentah — ganti dengan
+        // safeArray() (id + name + slug + masked saja, tanpa token/secret utuh).
+        // $hidden di model adalah lapis kedua; mapping eksplisit ini lapis pertama.
+        $data = $jobs->map(function (MuseJob $j) {
+            $arr = $j->toArray();
+            $arr['muse_profile'] = $j->museProfile ? $j->museProfile->safeArray() : null;
+            return $arr;
+        })->values();
+        return response()->json(['success' => true, 'count' => $jobs->count(), 'data' => $data]);
     }
     public function showJob(Request $request, $id, MuseService $muse)
     {
         if ($r = $this->checkMuseToken($request, $muse)) return $r;
         $job = MuseJob::with(['generation', 'museProfile'])->findOrFail($id);
         $job->append('muse_profile_name');
-        return response()->json(['success' => true, 'data' => $job]);
+        // KEAMANAN: relasi museProfile diganti safeArray() — tanpa token/secret utuh.
+        $arr = $job->toArray();
+        $arr['muse_profile'] = $job->museProfile ? $job->museProfile->safeArray() : null;
+        return response()->json(['success' => true, 'data' => $arr]);
     }
     public function webhook(Request $request, MuseService $muse)
     {

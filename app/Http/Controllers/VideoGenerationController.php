@@ -51,8 +51,16 @@ class VideoGenerationController extends Controller
         $q = static::applyFilters($q, $request);
 
         $page = $q->paginate($this->perPage($request, 20));
-        $page->getCollection()->each(fn ($g) => $g->append('muse_profile_name'));
-
+        // KEAMANAN: profil Muse bersarang (muse_job.muse_profile) diganti safeArray()
+        // agar api_token/webhook_secret tidak pernah ikut ter-serialize ke JSON.
+        $page->setCollection($page->getCollection()->map(function ($g) {
+            $g->append('muse_profile_name');
+            $arr = $g->toArray();
+            if (isset($arr['muse_job']['muse_profile']) && $g->museJob?->museProfile) {
+                $arr['muse_job']['muse_profile'] = $g->museJob->museProfile->safeArray();
+            }
+            return $arr;
+        }));
         return response()->json(['success' => true, 'data' => $page]);
     }
 
@@ -132,8 +140,12 @@ class VideoGenerationController extends Controller
     {
         $g = $this->findAccessible($request, $id)->load(['user:id,name,email,avatar', 'reviewer:id,name', 'museJob.museProfile']);
         $g->append('muse_profile_name');
-
-        return response()->json(['success' => true, 'data' => $g]);
+        // KEAMANAN: profil Muse bersarang diganti safeArray() — tanpa token/secret utuh.
+        $arr = $g->toArray();
+        if (isset($arr['muse_job']['muse_profile']) && $g->museJob?->museProfile) {
+            $arr['muse_job']['muse_profile'] = $g->museJob->museProfile->safeArray();
+        }
+        return response()->json(['success' => true, 'data' => $arr]);
     }
 
     public function destroy(Request $request, $id)
