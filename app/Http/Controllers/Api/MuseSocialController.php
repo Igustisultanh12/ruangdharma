@@ -31,7 +31,7 @@ class MuseSocialController extends Controller
     public function statsWebhook(Request $request, MuseService $muse)
     {
         if ($r = $this->check($request, $muse)) return $r;
-        $data = $request->validate(['platform' => 'required|in:instagram,facebook', 'account_username' => 'sometimes|nullable|string|max:100', 'followers' => 'sometimes|integer', 'total_likes' => 'sometimes|integer', 'total_comments' => 'sometimes|integer', 'reach' => 'sometimes|integer', 'views' => 'sometimes|integer', 'posts' => 'sometimes|array', 'recent_comments' => 'sometimes|array', 'daily' => 'sometimes|array']);
+        $data = $request->validate(['platform' => 'required|in:instagram,facebook,youtube', 'account_username' => 'sometimes|nullable|string|max:100', 'followers' => 'sometimes|integer', 'total_likes' => 'sometimes|integer', 'total_comments' => 'sometimes|integer', 'reach' => 'sometimes|integer', 'views' => 'sometimes|integer', 'posts' => 'sometimes|array', 'recent_comments' => 'sometimes|array', 'daily' => 'sometimes|array']);
         $stat = SocialStat::updateOrCreate(['platform' => $data['platform']], array_merge($data, ['fetched_at' => now()]));
         return response()->json(['success' => true, 'platform' => $stat->platform, 'fetched_at' => $stat->fetched_at]);
     }

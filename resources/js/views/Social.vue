@@ -12,8 +12,11 @@ const platform = ref('instagram');
 const platformOptions = [
   { value: 'instagram', label: 'Instagram', icon: 'camera' },
   { value: 'facebook', label: 'Facebook', icon: 'thumbs-up' },
+  { value: 'youtube', label: 'YouTube', icon: 'play' },
   { value: 'tiktok', label: 'TikTok (Manual)', icon: 'music' },
 ];
+const platformNames = { instagram: 'Instagram', facebook: 'Facebook', youtube: 'YouTube', tiktok: 'TikTok' };
+const platformName = computed(() => platformNames[platform.value] || platform.value);
 const loading = ref(false);
 const stats = ref(null);
 const publishes = ref([]);
@@ -26,6 +29,14 @@ const refreshing = ref(false);
 const statCards = computed(() => {
   const s = stats.value;
   if (!s) return [];
+  if (platform.value === 'youtube') {
+    return [
+      { label: 'Subscriber', value: s.followers || 0, icon: 'users', color: 'violet' },
+      { label: 'Total Views', value: s.views || 0, icon: 'eye', color: 'emerald' },
+      { label: 'Total Like', value: s.total_likes || 0, icon: 'heart', color: 'rose' },
+      { label: 'Total Komen', value: s.total_comments || 0, icon: 'messages-square', color: 'sky' },
+    ];
+  }
   return [
     { label: 'Followers', value: s.followers || 0, icon: 'users', color: 'violet' },
     { label: 'Total Like', value: s.total_likes || 0, icon: 'heart', color: 'rose' },
@@ -65,7 +76,7 @@ async function refreshStats() {
   } catch (e) { toast.error(errorMessage(e)); } finally { refreshing.value = false; }
 }
 async function publish(gen, plat) {
-  const ok = await confirmDialog({ title: `Upload ke ${plat === 'instagram' ? 'Instagram' : 'Facebook'}?`, message: `Video "${gen.keyword}" akan di-upload ke ${plat} dengan caption yang ada di Riwayat.`, confirmText: 'Ya, Upload', tone: 'primary' });
+  const ok = await confirmDialog({ title: `Upload ke ${platformNames[plat] || plat}?`, message: `Video "${gen.keyword}" akan di-upload ke ${platformNames[plat] || plat} dengan caption yang ada di Riwayat.`, confirmText: 'Ya, Upload', tone: 'primary' });
   if (!ok) return;
   publishing.value = true;
   try {
@@ -91,7 +102,7 @@ onMounted(async () => { await loadStats(); await loadPublishes(); await loadGene
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="font-display text-2xl font-bold">Medsos</h1>
-        <p class="mt-1 text-sm text-muted">Pantau like, komen & statistik Instagram & Facebook. Upload langsung dari video yang sudah terbit. TikTok tetap manual.</p>
+        <p class="mt-1 text-sm text-muted">Pantau statistik Instagram, Facebook & YouTube. Upload langsung dari video yang sudah terbit. TikTok tetap manual.</p>
       </div>
       <button class="btn btn-secondary" :disabled="refreshing" @click="refreshStats">
         <Spinner v-if="refreshing" class="h-4 w-4" />
@@ -135,7 +146,7 @@ onMounted(async () => { await loadStats(); await loadPublishes(); await loadGene
 
       <!-- Posts -->
       <div class="card p-6">
-        <h2 class="font-display text-lg font-bold">Post terbaru</h2>
+        <h2 class="font-display text-lg font-bold">{{ platform === 'youtube' ? 'Video terbaru' : 'Post terbaru' }}</h2>
         <div v-if="stats?.posts?.length" class="mt-3 space-y-3">
           <div v-for="p in stats.posts" :key="p.id || p.url" class="flex gap-3 rounded-2xl border-2 border-line p-3">
             <div class="min-w-0 flex-1">
@@ -168,17 +179,17 @@ onMounted(async () => { await loadStats(); await loadPublishes(); await loadGene
       <!-- Publish -->
       <div class="card p-6">
         <div class="flex items-center justify-between gap-3">
-          <h2 class="font-display text-lg font-bold">Upload video ke {{ platform === 'instagram' ? 'Instagram' : 'Facebook' }}</h2>
+          <h2 class="font-display text-lg font-bold">Upload video ke {{ platformName }}</h2>
           <Badge color="sky" icon="film">Via Muse</Badge>
         </div>
-        <p class="mt-1 text-sm text-muted">Pilih video yang sudah punya file (video_url). Muse akan upload ke {{ platform }} dengan caption dari Riwayat.</p>
+        <p class="mt-1 text-sm text-muted">Pilih video yang sudah punya file (video_url). Muse akan upload ke {{ platformName }} dengan caption dari Riwayat.{{ platform === 'youtube' ? ' Video vertikal akan terbit sebagai YouTube Shorts.' : '' }}</p>
         <div class="mt-4 grid gap-3">
           <div v-for="g in generations" :key="g.id" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-line p-3">
             <div class="min-w-0">
               <p class="font-bold">{{ g.keyword }}</p>
               <p class="text-xs text-muted">{{ g.durasi }} dtk • {{ g.model }} • {{ dateTime(g.created_at) }} • <span v-if="g.video_url" class="text-emerald-600">Ada video</span><span v-else class="text-amber-600">Belum ada video</span></p>
             </div>
-            <button class="btn btn-primary btn-sm" :disabled="!g.video_url || publishing" @click="publish(g, platform)">Upload ke {{ platform === 'instagram' ? 'Instagram' : 'Facebook' }}</button>
+            <button class="btn btn-primary btn-sm" :disabled="!g.video_url || publishing" @click="publish(g, platform)">Upload ke {{ platformName }}</button>
           </div>
         </div>
       </div>

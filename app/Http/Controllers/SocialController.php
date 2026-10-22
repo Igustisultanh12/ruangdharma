@@ -10,7 +10,7 @@ class SocialController extends Controller
     {
         $platform = $request->input('platform', 'instagram');
         $stat = SocialStat::where('platform', $platform)->first();
-        return response()->json(['success' => true, 'platform' => $platform, 'data' => $stat, 'connected' => (bool) $stat, 'hint' => $stat ? null : 'Belum ada data. Klik Refresh agar Muse mengambil statistik terbaru dari Instagram / Facebook.']);
+        return response()->json(['success' => true, 'platform' => $platform, 'data' => $stat, 'connected' => (bool) $stat, 'hint' => $stat ? null : 'Belum ada data. Klik Refresh agar Muse mengambil statistik terbaru dari Instagram / Facebook / YouTube.']);
     }
     public function publishes(Request $request)
     {
@@ -22,7 +22,7 @@ class SocialController extends Controller
     {
         $data = $request->validate([
             'generation_id' => 'required|integer|exists:video_generations,id',
-            'platform' => 'required|in:instagram,facebook,tiktok',
+            'platform' => 'required|in:instagram,facebook,tiktok,youtube',
         ]);
         $gen = VideoGeneration::where('id', $data['generation_id'])->where('user_id', $request->user()->id)->firstOrFail();
         if ($data['platform'] === 'tiktok') {
@@ -31,7 +31,8 @@ class SocialController extends Controller
         }
         if (!$gen->video_url) return response()->json(['success' => false, 'message' => 'Video belum ada file-nya. Generate / upload dulu via Muse.'], 422);
         $pub = SocialPublish::create(['user_id' => $request->user()->id, 'generation_id' => $gen->id, 'platform' => $data['platform'], 'status' => 'queued', 'caption' => $gen->captionText(), 'video_url' => $gen->video_url, 'requested_at' => now()]);
-        return response()->json(['success' => true, 'message' => 'Job publish dikirim ke Muse. Muse akan upload ke ' . ucfirst($data['platform']) . ' dan kirim hasil balik.', 'data' => $pub], 201);
+        $names = ['instagram' => 'Instagram', 'facebook' => 'Facebook', 'youtube' => 'YouTube'];
+        return response()->json(['success' => true, 'message' => 'Job publish dikirim ke Muse. Muse akan upload ke ' . ($names[$data['platform']] ?? ucfirst($data['platform'])) . ' dan kirim hasil balik.', 'data' => $pub], 201);
     }
     public function refresh(Request $request)
     {
