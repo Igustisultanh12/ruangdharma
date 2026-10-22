@@ -76,6 +76,36 @@ class MuseYoutubeController extends Controller
         ]);
         return response()->json(['success' => true, 'exists' => false, 'data' => $pub], 201);
     }
+    /**
+     * Daftarkan hasil deteksi sinkronisasi: video web yang belum ada di YouTube dibuatkan
+     * SocialPublish berstatus 'detected' — MENUNGGU konfirmasi user di web (centang/uncek)
+     * sebelum benar-benar di-upload. Idempotent: generation yang status terakhirnya
+     * detected/queued/processing/completed/skipped tidak dibuatkan lagi.
+     */
+    public function registerDetected(Request $request, MuseService $muse)
+    {
+        if ($r = $this->check($request, $muse)) return $r;
+        $data = $request->validate(['items' => 'required|array', 'items.*.generation_id' => 'required|integer|exists:video_generations,id']);
+        $created = 0; $skipped = 0;
+        foreach ($data['items'] as $item) {
+            $gid = (int) $item['generation_id'];
+            $latest = SocialPublish::where('platform', 'youtube')->where('generation_id', $gid)->orderByDesc('id')->first();
+            if ($latest && in_array($latest->status, ['detected', 'queued', 'processing', 'completed', 'skipped'], true)) { $skipped++; continue; }
+            $gen = VideoGeneration::findOrFail($gid);
+            if (!$gen->video_url) { $skipped++; continue; }
+            SocialPublish::create([
+                'user_id' => $gen->user_id,
+                'generation_id' => $gen->id,
+                'platform' => 'youtube',
+                'status' => 'detected',
+                'caption' => $gen->captionText(),
+                'video_url' => $gen->video_url,
+                'requested_at' => now(),
+            ]);
+            $created++;
+        }
+        return response()->json(['success' => true, 'created' => $created, 'skipped' => $skipped]);
+    }
     /** Tandai sinkronisasi selesai: bersihkan flag + simpan ringkasan. */
     public function syncDone(Request $request, MuseService $muse)
     {

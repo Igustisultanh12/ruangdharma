@@ -31,6 +31,8 @@ class YoutubeController extends Controller
                 'model' => $g->model,
                 'video_url' => $g->video_url,
                 'created_at' => $g->created_at,
+                'caption' => $p ? $p->caption : $g->captionText(),
+                'publish_id' => $p ? $p->id : null,
                 'youtube_status' => $p ? $p->status : 'none',
                 'youtube_post_url' => $p ? $p->post_url : null,
                 'youtube_error' => $p ? $p->error : null,
@@ -56,6 +58,26 @@ class YoutubeController extends Controller
             ],
             'videos' => $videos,
         ]);
+    }
+    /**
+     * Konfirmasi hasil deteksi: item 'detected' yang dipilih menjadi 'queued' (Muse meng-upload-nya
+     * satu paket dengan caption dari web), yang tidak dipilih menjadi 'skipped'.
+     */
+    public function confirmUpload(Request $request)
+    {
+        $data = $request->validate([
+            'publish_ids' => 'present|array', 'publish_ids.*' => 'integer',
+            'skip_ids' => 'sometimes|array', 'skip_ids.*' => 'integer',
+        ]);
+        $base = SocialPublish::where('user_id', $request->user()->id)->where('platform', 'youtube')->where('status', 'detected');
+        $queued = 0; $skipped = 0;
+        if (!empty($data['publish_ids'])) {
+            $queued = (clone $base)->whereIn('id', $data['publish_ids'])->update(['status' => 'queued', 'requested_at' => now()]);
+        }
+        if (!empty($data['skip_ids'])) {
+            $skipped = (clone $base)->whereIn('id', $data['skip_ids'])->update(['status' => 'skipped']);
+        }
+        return response()->json(['success' => true, 'queued' => $queued, 'skipped' => $skipped, 'message' => "{$queued} video diantrekan untuk di-upload ke YouTube oleh Muse (satu paket dengan caption-nya)." . ($skipped ? " {$skipped} video dilewati." : '')]);
     }
     /** Minta sinkronisasi: Muse akan membandingkan video web vs channel YouTube lalu meng-upload yang belum ada. */
     public function sync(Request $request)

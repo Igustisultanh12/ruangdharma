@@ -136,6 +136,44 @@ class VideoGenerationController extends Controller
         ], 201);
     }
 
+    /** Job draft harian dari Muse yang menunggu konfirmasi admin (menu Job Pending). */
+    public function pendingConfirmation(Request $request)
+    {
+        $q = $request->user()->videoGenerations()->with('museJob.museProfile')
+            ->where('status', 'pending_confirmation')->orderByDesc('created_at');
+        $page = $q->paginate($this->perPage($request, 20));
+        $page->setCollection($page->getCollection()->map(function ($g) {
+            $g->append('muse_profile_name');
+            $arr = $g->toArray();
+            if (isset($arr['muse_job']['muse_profile']) && $g->museJob?->museProfile) {
+                $arr['muse_job']['muse_profile'] = $g->museJob->museProfile->safeArray();
+            }
+            return $arr;
+        }));
+        return response()->json(['success' => true, 'data' => $page]);
+    }
+
+    /** Konfirmasi job pending: MuseJob menjadi queued sehingga Muse langsung men-generate videonya. */
+    public function confirmJob(Request $request, $id)
+    {
+        $g = $request->user()->videoGenerations()->where('status', 'pending_confirmation')->findOrFail($id);
+        if ($g->museJob) $g->museJob->update(['status' => 'queued']);
+        $g->update(['status' => 'waiting_muse', 'caption' => 'Menunggu Muse — video sedang dibuat...']);
+        ActivityLogger::fromRequest($request, 'generate', "Konfirmasi job pending #{$g->muse_job_id}: {$g->keyword} ({$g->model}, {$g->durasi}s) — mulai digenerate Muse", ['generation_id' => $g->id, 'muse_job_id' => $g->muse_job_id]);
+        NotificationService::notify($request->user(), 'Job dikonfirmasi', "Video \"{$g->keyword}\" mulai dibuat oleh Muse.");
+        return response()->json(['success' => true, 'message' => 'Job dikonfirmasi. Muse akan langsung membuat videonya.', 'data' => $g->fresh()]);
+    }
+
+    /** Tolak job pending: tidak akan digenerate. */
+    public function rejectJob(Request $request, $id)
+    {
+        $g = $request->user()->videoGenerations()->where('status', 'pending_confirmation')->findOrFail($id);
+        if ($g->museJob) $g->museJob->update(['status' => 'cancelled', 'error' => 'Ditolak admin dari menu Job Pending.']);
+        $g->update(['status' => 'cancelled']);
+        ActivityLogger::fromRequest($request, 'generate', "Tolak job pending #{$g->muse_job_id}: {$g->keyword}", ['generation_id' => $g->id, 'muse_job_id' => $g->muse_job_id]);
+        return response()->json(['success' => true, 'message' => 'Job ditolak dan tidak akan dibuat.', 'data' => $g->fresh()]);
+    }
+
     public function show(Request $request, $id)
     {
         $g = $this->findAccessible($request, $id)->load(['user:id,name,email,avatar', 'reviewer:id,name', 'museJob.museProfile']);
