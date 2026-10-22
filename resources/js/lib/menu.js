@@ -14,6 +14,7 @@ export const menu = [
             { label: 'Media', to: '/media', icon: 'images', name: 'media' },
             { label: 'Notifikasi', to: '/notifications', icon: 'bell', name: 'notifications', badge: 'unread' },
             { label: 'Medsos', to: '/social', icon: 'share-2', name: 'social' },
+            { label: 'YouTube', to: '/youtube', icon: 'play', name: 'youtube' },
         ],
     },
     {

@@ -44,6 +44,11 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/muse/social/publishes/pending', [\App\Http\Controllers\Api\MuseSocialController::class, 'pendingPublishes']);
     Route::post('/muse/social/publish-webhook', [\App\Http\Controllers\Api\MuseSocialController::class, 'publishWebhook']);
     Route::post('/muse/social/stats-webhook', [\App\Http\Controllers\Api\MuseSocialController::class, 'statsWebhook']);
+    // Sinkronisasi YouTube — cek flag, daftar video web, antrekan upload, selesai.
+    Route::get('/muse/youtube/sync-pending', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'syncPending']);
+    Route::get('/muse/youtube/videos', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'videos']);
+    Route::post('/muse/youtube/queue-upload', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'queueUpload']);
+    Route::post('/muse/youtube/sync-done', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'syncDone']);
 });
 
 // ---------- Eksternal via X-Api-Key ----------
@@ -95,6 +100,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/social/publishes', [\App\Http\Controllers\SocialController::class, 'publishes']);
     Route::post('/social/publish', [\App\Http\Controllers\SocialController::class, 'publish']);
     Route::post('/social/refresh', [\App\Http\Controllers\SocialController::class, 'refresh']);
+    // YouTube — halaman khusus: ringkasan channel, status per video, tombol sinkronisasi.
+    Route::get('/youtube/overview', [\App\Http\Controllers\YoutubeController::class, 'overview']);
+    Route::post('/youtube/sync', [\App\Http\Controllers\YoutubeController::class, 'sync']);
     // Backsound - upload & pilih backsound untuk video
     Route::get('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'index']);
     Route::post('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'store']);
