@@ -1,6 +1,8 @@
 <?php
 namespace App\Http\Controllers;
 use App\Models\Backsound;
+use App\Models\BacksoundRequest;
+use App\Models\VideoGeneration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -30,6 +32,83 @@ class BacksoundController extends Controller
         } catch (\Throwable $e) {}
         $bs = Backsound::create(['user_id' => $request->user()->id, 'name' => $data['name'], 'file_url' => '/storage/' . $path, 'duration_sec' => $duration]);
         return response()->json(['success' => true, 'message' => 'Backsound diunggah.', 'data' => $bs], 201);
+    }
+    // ---------- Auto Backsound (Muse carikan, user preview & setujui dulu) ----------
+    private function findOwnedGeneration(Request $request, $id): VideoGeneration
+    {
+        $g = VideoGeneration::findOrFail($id);
+        if ($g->user_id !== $request->user()->id) abort(403);
+        return $g;
+    }
+    private function latestAutoRequest($generationId): ?BacksoundRequest
+    {
+        return BacksoundRequest::where('generation_id', $generationId)->orderByDesc('id')->first();
+    }
+    /** Minta Muse mencarikan backsound untuk video ini (satu permintaan terbuka per video). */
+    public function autoRequest(Request $request, $id)
+    {
+        $data = $request->validate(['note' => 'sometimes|nullable|string|max:255']);
+        $g = $this->findOwnedGeneration($request, $id);
+        $open = BacksoundRequest::where('generation_id', $g->id)->whereIn('status', BacksoundRequest::OPEN_STATUSES)->orderByDesc('id')->first();
+        if ($open) return response()->json(['success' => true, 'message' => 'Sudah ada permintaan Auto Backsound yang aktif untuk video ini.', 'data' => $open]);
+        $br = BacksoundRequest::create(['user_id' => $request->user()->id, 'generation_id' => $g->id, 'status' => 'queued', 'note' => $data['note'] ?? null]);
+        return response()->json(['success' => true, 'message' => 'Permintaan terkirim. Muse akan mencarikan backsound yang cocok, lalu kamu bisa mendengarkan preview-nya di sini.', 'data' => $br], 201);
+    }
+    /** Permintaan Auto Backsound terakhir untuk video ini (untuk polling status & preview). */
+    public function autoShow(Request $request, $id)
+    {
+        $g = $this->findOwnedGeneration($request, $id);
+        return response()->json(['success' => true, 'data' => $this->latestAutoRequest($g->id)]);
+    }
+    /**
+     * User menyetujui kandidat dari preview -> gabungkan ke video.
+     * Penggabungan memakai alur mix server yang sudah ada (updateBacksound):
+     * selalu dari video original, volume dari pilihan user, audio kandidat di-loop penuh.
+     */
+    public function autoApply(Request $request, $id)
+    {
+        $data = $request->validate(['volume' => 'sometimes|integer|min:0|max:100']);
+        $g = $this->findOwnedGeneration($request, $id);
+        $br = $this->latestAutoRequest($g->id);
+        if (!$br || $br->status !== 'preview' || empty($br->candidate_url)) {
+            return response()->json(['success' => false, 'message' => 'Belum ada kandidat backsound yang siap digabungkan.'], 422);
+        }
+        $sub = Request::create('/api/generations/' . $g->id . '/backsound', 'PUT', [
+            'backsound_url' => $br->candidate_url,
+            'backsound_volume' => $data['volume'] ?? 20,
+            'backsound_trim_start' => 0,
+            'backsound_trim_end' => null,
+        ]);
+        $sub->setUserResolver(fn () => $request->user());
+        $response = app(VideoGenerationController::class)->updateBacksound($sub, $g->id);
+        $payload = json_decode($response->getContent(), true);
+        if ($response->getStatusCode() === 200 && ($payload['success'] ?? false)) {
+            $br->update(['status' => 'done', 'error' => null]);
+            $payload['auto_backsound'] = $br->fresh();
+        }
+        return response()->json($payload, $response->getStatusCode());
+    }
+    /** User menolak kandidat di preview -> Muse mencarikan yang lain. */
+    public function autoReject(Request $request, $id)
+    {
+        $g = $this->findOwnedGeneration($request, $id);
+        $br = $this->latestAutoRequest($g->id);
+        if (!$br || $br->status !== 'preview') {
+            return response()->json(['success' => false, 'message' => 'Tidak ada kandidat yang bisa ditolak saat ini.'], 422);
+        }
+        $br->update(['status' => 'rejected', 'error' => null]);
+        return response()->json(['success' => true, 'message' => 'Baik, Muse akan mencarikan backsound lain.', 'data' => $br->fresh()]);
+    }
+    /** Batalkan permintaan Auto Backsound yang masih terbuka. */
+    public function autoCancel(Request $request, $id)
+    {
+        $g = $this->findOwnedGeneration($request, $id);
+        $br = $this->latestAutoRequest($g->id);
+        if (!$br || !$br->isOpen()) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada permintaan Auto Backsound aktif.'], 422);
+        }
+        $br->update(['status' => 'cancelled']);
+        return response()->json(['success' => true, 'message' => 'Permintaan Auto Backsound dibatalkan.', 'data' => $br->fresh()]);
     }
     public function destroy(Request $request, Backsound $backsound)
     {

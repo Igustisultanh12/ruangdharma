@@ -51,6 +51,10 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::post('/muse/youtube/queue-upload', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'queueUpload']);
     Route::post('/muse/youtube/detected', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'registerDetected']);
     Route::post('/muse/youtube/sync-done', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'syncDone']);
+    // Auto Backsound — permintaan menunggu, progres pencarian, unggah kandidat preview.
+    Route::get('/muse/backsound/pending', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'pending']);
+    Route::post('/muse/backsound/status', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'status']);
+    Route::post('/muse/backsound/candidate', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'candidate']);
 });
 
 // ---------- Eksternal via X-Api-Key ----------
@@ -114,6 +118,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'index']);
     Route::post('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'store']);
     Route::delete('/backsounds/{backsound}', [\App\Http\Controllers\BacksoundController::class, 'destroy']);
+    // Auto Backsound - Muse carikan kandidat, user preview dulu, setujui baru digabungkan
+    Route::get('/generations/{id}/auto-backsound', [\App\Http\Controllers\BacksoundController::class, 'autoShow']);
+    Route::post('/generations/{id}/auto-backsound', [\App\Http\Controllers\BacksoundController::class, 'autoRequest']);
+    Route::post('/generations/{id}/auto-backsound/apply', [\App\Http\Controllers\BacksoundController::class, 'autoApply']);
+    Route::post('/generations/{id}/auto-backsound/reject', [\App\Http\Controllers\BacksoundController::class, 'autoReject']);
+    Route::post('/generations/{id}/auto-backsound/cancel', [\App\Http\Controllers\BacksoundController::class, 'autoCancel']);
 
     // Komentar
     Route::get('/generations/{generationId}/comments', [CommentController::class, 'index']);

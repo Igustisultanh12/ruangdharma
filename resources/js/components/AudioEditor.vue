@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import api, { errorMessage } from '@/lib/api.js';
 import { toast } from '@/lib/toast.js';
 import Icon from '@/components/ui/Icon.vue';
@@ -133,6 +133,71 @@ async function uploadAudio(e) {
     toast.success('Audio diunggah, sekarang atur volume & potong di bawah lalu Simpan.');
   } catch (err) { toast.error(errorMessage(err)); } finally { uploading.value = false; e.target.value = ''; }
 }
+// ---------- Auto Backsound: Muse carikan, preview dulu, setujui baru digabung ----------
+const autoReq = ref(null);
+const autoBusy = ref(false);
+let autoTimer = null;
+const AUTO_OPEN = ['queued', 'searching', 'rejected'];
+const AUTO_LABELS = {
+  queued: 'Menunggu Muse mencarikan backsound…',
+  searching: 'Muse sedang mencari backsound yang cocok…',
+  preview: 'Kandidat siap — dengarkan dulu, lalu pilih Gabungkan atau Cari Lainnya.',
+  rejected: 'Kandidat ditolak — Muse sedang mencarikan yang lain…',
+  done: 'Backsound sudah digabungkan ke video.',
+  failed: 'Pencarian backsound gagal.',
+  cancelled: 'Permintaan dibatalkan.',
+};
+function scheduleAutoPoll() {
+  clearTimeout(autoTimer);
+  if (autoReq.value && AUTO_OPEN.includes(autoReq.value.status)) {
+    autoTimer = setTimeout(loadAuto, 3000);
+  }
+}
+async function loadAuto() {
+  try {
+    const { data } = await api.get(`/generations/${props.generation.id}/auto-backsound`);
+    autoReq.value = data.data || null;
+  } catch { /* diamkan: panel auto bersifat tambahan */ }
+  scheduleAutoPoll();
+}
+async function requestAuto() {
+  autoBusy.value = true;
+  try {
+    const { data } = await api.post(`/generations/${props.generation.id}/auto-backsound`, {});
+    autoReq.value = data.data;
+    toast.success(data.message || 'Permintaan Auto Backsound terkirim.');
+    scheduleAutoPoll();
+  } catch (err) { toast.error(errorMessage(err)); } finally { autoBusy.value = false; }
+}
+async function applyAuto() {
+  autoBusy.value = true;
+  try {
+    const { data } = await api.post(`/generations/${props.generation.id}/auto-backsound/apply`, { volume: volume.value });
+    toast.success(data.message || 'Backsound digabungkan ke video.');
+    await loadAuto();
+    emit('updated');
+  } catch (err) { toast.error(errorMessage(err)); } finally { autoBusy.value = false; }
+}
+async function rejectAuto() {
+  autoBusy.value = true;
+  try {
+    const { data } = await api.post(`/generations/${props.generation.id}/auto-backsound/reject`, {});
+    autoReq.value = data.data;
+    toast.success(data.message || 'Baik, Muse akan mencarikan yang lain.');
+    scheduleAutoPoll();
+  } catch (err) { toast.error(errorMessage(err)); } finally { autoBusy.value = false; }
+}
+async function cancelAuto() {
+  autoBusy.value = true;
+  try {
+    const { data } = await api.post(`/generations/${props.generation.id}/auto-backsound/cancel`, {});
+    autoReq.value = data.data;
+    toast.success(data.message || 'Permintaan dibatalkan.');
+  } catch (err) { toast.error(errorMessage(err)); } finally { autoBusy.value = false; }
+}
+onMounted(() => { loadAuto(); });
+onUnmounted(() => { clearTimeout(autoTimer); });
+
 async function save() {
   saving.value = true;
   try {
@@ -177,5 +242,38 @@ async function save() {
       <button class="btn btn-ghost btn-sm" @click="volume = 20; trimStart = 0; trimEnd = null">Reset</button>
     </div>
     <p class="text-xs text-muted">Setelah Simpan, server langsung mix audio ke video (volume {{ (volume/100).toFixed(2) }}, trim {{ trimStart }}s – {{ trimEnd ?? 'habis' }} — offset dalam file audio; server memotong/loop sesuai durasi video {{ fmt(videoDuration) }}). Halaman akan refresh otomatis.</p>
+  </div>
+
+  <!-- Auto Backsound: Muse carikan gamelan Bali/Jawa atau yang cocok dengan tema video.
+       Kandidat WAJIB di-preview dulu; penggabungan hanya terjadi setelah tombol Gabungkan ditekan. -->
+  <div class="card p-4 space-y-3">
+    <div class="flex items-center gap-2"><Icon name="sparkles" class="h-4 w-4" /><h3 class="font-bold">Auto Backsound</h3><span class="text-xs text-muted">Muse carikan gamelan Bali/Jawa atau yang cocok — preview dulu, oke baru digabungkan</span></div>
+    <template v-if="!autoReq || ['done', 'failed', 'cancelled'].includes(autoReq.status)">
+      <p v-if="autoReq" class="text-sm" :class="autoReq.status === 'failed' ? 'text-red-500' : 'text-muted'">{{ AUTO_LABELS[autoReq.status] }}<span v-if="autoReq.status === 'failed' && autoReq.error"> {{ autoReq.error }}</span></p>
+      <div>
+        <button class="btn btn-primary btn-sm" :disabled="autoBusy" @click="requestAuto"><Spinner v-if="autoBusy" class="h-4 w-4" />Minta Auto Backsound</button>
+      </div>
+      <p class="text-xs text-muted">Muse akan mencari backsound yang cocok dengan tema video ini. Hasilnya muncul di sini sebagai preview — tidak langsung digabungkan.</p>
+    </template>
+    <template v-else>
+      <div class="flex items-center gap-2 text-sm text-muted">
+        <Spinner v-if="AUTO_OPEN.includes(autoReq.status)" class="h-4 w-4" />
+        <span>{{ AUTO_LABELS[autoReq.status] || autoReq.status }}</span>
+      </div>
+      <div v-if="autoReq.status === 'preview'" class="space-y-2">
+        <p class="text-sm font-medium">{{ autoReq.candidate_name }}</p>
+        <p v-if="autoReq.candidate_source" class="text-xs text-muted">Sumber: {{ autoReq.candidate_source }}</p>
+        <audio controls :src="autoReq.candidate_url" class="w-full"></audio>
+        <p class="text-xs text-muted">Volume penggabungan mengikuti slider Volume di Editor Audio di atas (sekarang {{ volume }}%).</p>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-primary btn-sm" :disabled="autoBusy" @click="applyAuto"><Spinner v-if="autoBusy" class="h-4 w-4" />Gabungkan ke Video</button>
+          <button class="btn btn-secondary btn-sm" :disabled="autoBusy" @click="rejectAuto">Cari Lainnya</button>
+          <button class="btn btn-ghost btn-sm" :disabled="autoBusy" @click="cancelAuto">Batalkan</button>
+        </div>
+      </div>
+      <div v-else class="flex gap-2">
+        <button class="btn btn-ghost btn-sm" :disabled="autoBusy" @click="cancelAuto">Batalkan</button>
+      </div>
+    </template>
   </div>
 </template>
