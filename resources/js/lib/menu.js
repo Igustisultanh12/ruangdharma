@@ -15,6 +15,7 @@ export const menu = [
             { label: 'Notifikasi', to: '/notifications', icon: 'bell', name: 'notifications', badge: 'unread' },
             { label: 'Medsos', to: '/social', icon: 'share-2', name: 'social' },
             { label: 'YouTube', to: '/youtube', icon: 'play', name: 'youtube' },
+            { label: 'Job Pending', to: '/job-pending', icon: 'hourglass', name: 'job.pending' },
         ],
     },
     {

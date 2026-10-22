@@ -15,15 +15,40 @@ const videos = ref([]);
 let timer = null;
 
 const counts = computed(() => {
-  const c = { total: videos.value.length, done: 0, progress: 0, none: 0, failed: 0 };
+  const c = { total: videos.value.length, done: 0, progress: 0, none: 0, failed: 0, detected: 0 };
   for (const v of videos.value) {
     if (v.youtube_status === 'completed') c.done++;
     else if (v.youtube_status === 'queued' || v.youtube_status === 'processing') c.progress++;
     else if (v.youtube_status === 'failed') c.failed++;
-    else c.none++;
+    else if (v.youtube_status === 'detected') c.detected++;
+    else if (v.youtube_status !== 'skipped') c.none++;
   }
   return c;
 });
+const detected = computed(() => videos.value.filter((v) => v.youtube_status === 'detected'));
+const checkOverrides = ref({});
+function isChecked(v) {
+  return checkOverrides.value[v.publish_id] ?? true;
+}
+function setChecked(v, val) {
+  checkOverrides.value = { ...checkOverrides.value, [v.publish_id]: val };
+}
+const confirming = ref(false);
+async function confirmSelected() {
+  const selectedIds = detected.value.filter((v) => isChecked(v)).map((v) => v.publish_id);
+  const skipIds = detected.value.filter((v) => !isChecked(v)).map((v) => v.publish_id);
+  if (!selectedIds.length && !skipIds.length) return;
+  const ok = await confirmDialog({ title: 'Upload yang dipilih?', message: `${selectedIds.length} video akan di-upload ke YouTube satu paket dengan caption-nya.${skipIds.length ? ` ${skipIds.length} video yang tidak dicentang akan dilewati.` : ''}`, confirmText: 'Ya, Upload', tone: 'primary' });
+  if (!ok) return;
+  confirming.value = true;
+  try {
+    const { data } = await api.post('/youtube/confirm-upload', { publish_ids: selectedIds, skip_ids: skipIds });
+    toast.success(data.message || 'Konfirmasi tersimpan.');
+    checkOverrides.value = {};
+    await load();
+    ensurePolling();
+  } catch (e) { toast.error(errorMessage(e)); } finally { confirming.value = false; }
+}
 const progressPct = computed(() => (counts.value.total ? Math.round((counts.value.done / counts.value.total) * 100) : 0));
 const busy = computed(() => !!sync.value.requested_at || counts.value.progress > 0);
 
@@ -47,6 +72,8 @@ function statusBadge(v) {
     case 'completed': return { color: 'emerald', label: 'Terbit di YouTube' };
     case 'processing': return { color: 'sky', label: 'Sedang di-upload...' };
     case 'queued': return { color: 'sky', label: 'Antri upload' };
+    case 'detected': return { color: 'violet', label: 'Menunggu konfirmasi' };
+    case 'skipped': return { color: 'gray', label: 'Dilewati' };
     case 'failed': return { color: 'rose', label: 'Gagal' };
     default: return { color: 'amber', label: 'Belum di-upload' };
   }
@@ -70,14 +97,14 @@ async function loadFirst() {
 }
 function ensurePolling() {
   if (busy.value && !timer) {
-    timer = setInterval(async () => { await load(); if (!busy.value) stopPolling(); }, 8000);
+    timer = setInterval(async () => { await load(); if (!busy.value) stopPolling(); }, 3000);
   }
 }
 function stopPolling() {
   if (timer) { clearInterval(timer); timer = null; }
 }
 async function syncNow() {
-  const ok = await confirmDialog({ title: 'Sinkronkan ke YouTube?', message: 'Muse akan mengecek semua video yang sudah jadi: yang belum ada di channel YouTube akan langsung di-upload sebagai Shorts. Progresnya tampil di halaman ini.', confirmText: 'Ya, Sinkronkan', tone: 'primary' });
+  const ok = await confirmDialog({ title: 'Sinkronkan ke YouTube?', message: 'Muse akan mengecek semua video yang sudah jadi dan membandingkannya dengan isi channel. Video yang belum ada di YouTube TIDAK langsung di-upload — akan ditampilkan di sini untuk kamu konfirmasi dulu (centang yang mau di-upload, uncek yang tidak).', confirmText: 'Ya, Sinkronkan', tone: 'primary' });
   if (!ok) return;
   syncing.value = true;
   try {
@@ -135,7 +162,33 @@ onUnmounted(stopPolling);
           <div class="mt-1 h-3 overflow-hidden rounded-full bg-line">
             <div class="h-full rounded-full bg-emerald-500 transition-all" :style="{ width: progressPct + '%' }"></div>
           </div>
-          <p class="mt-2 text-xs text-muted">{{ counts.progress }} sedang proses • {{ counts.none }} belum di-upload • {{ counts.failed }} gagal</p>
+          <p class="mt-2 text-xs text-muted">{{ counts.progress }} sedang proses • {{ counts.detected }} menunggu konfirmasi • {{ counts.none }} belum di-upload • {{ counts.failed }} gagal</p>
+        </div>
+      </div>
+
+      <!-- Detected: needs confirmation -->
+      <div v-if="detected.length" class="card border-violet-300 p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="font-display text-lg font-bold">Perlu konfirmasi upload</h2>
+          <Badge color="violet" icon="list-checks">{{ detected.length }} video terdeteksi belum ada di YouTube</Badge>
+        </div>
+        <p class="mt-1 text-sm text-muted">Hasil deteksi sinkronisasi. Centang video yang mau di-upload (satu paket dengan caption dari web), hilangkan centang yang tidak. Yang tidak dicentang akan dilewati.</p>
+        <div class="mt-4 grid gap-3">
+          <label v-for="v in detected" :key="v.publish_id" class="flex cursor-pointer gap-3 rounded-2xl border-2 border-line p-3">
+            <input type="checkbox" class="checkbox mt-1" :checked="isChecked(v)" @change="setChecked(v, $event.target.checked)" />
+            <span class="min-w-0 flex-1">
+              <span class="block font-bold">{{ v.keyword }}</span>
+              <span class="block text-xs text-muted">{{ v.durasi }} dtk • {{ v.model }} • dibuat {{ dateTime(v.created_at) }}</span>
+              <span v-if="v.caption" class="mt-1 block whitespace-pre-line text-xs text-muted line-clamp-3">Caption: {{ v.caption }}</span>
+            </span>
+          </label>
+        </div>
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <button class="btn btn-primary" :disabled="confirming" @click="confirmSelected">
+            <Spinner v-if="confirming" class="h-4 w-4" />
+            Upload yang dipilih ({{ detected.filter((v) => isChecked(v)).length }})
+          </button>
+          <span class="text-xs text-muted">{{ detected.filter((v) => !isChecked(v)).length }} tidak dicentang akan dilewati</span>
         </div>
       </div>
 

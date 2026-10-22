@@ -48,6 +48,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/muse/youtube/sync-pending', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'syncPending']);
     Route::get('/muse/youtube/videos', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'videos']);
     Route::post('/muse/youtube/queue-upload', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'queueUpload']);
+    Route::post('/muse/youtube/detected', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'registerDetected']);
     Route::post('/muse/youtube/sync-done', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'syncDone']);
 });
 
@@ -79,6 +80,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/generations/calendar', [VideoGenerationController::class, 'calendar']);
     Route::get('/generations/counts', [VideoGenerationController::class, 'counts']);
     Route::get('/generations/{id}', [VideoGenerationController::class, 'show']);
+    // Job Pending — draft harian dari Muse menunggu konfirmasi admin sebelum digenerate.
+    Route::get('/jobs/pending-confirmation', [VideoGenerationController::class, 'pendingConfirmation']);
+    Route::post('/generations/{id}/confirm-job', [VideoGenerationController::class, 'confirmJob']);
+    Route::post('/generations/{id}/reject-job', [VideoGenerationController::class, 'rejectJob']);
     Route::get('/generations/{id}/download-txt', [VideoGenerationController::class, 'downloadTxt']);
     Route::delete('/generations/{id}', [VideoGenerationController::class, 'destroy']);
     Route::post('/generations/{id}/toggle-favorite', [VideoGenerationController::class, 'toggleFavorite']);
@@ -103,6 +108,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // YouTube — halaman khusus: ringkasan channel, status per video, tombol sinkronisasi.
     Route::get('/youtube/overview', [\App\Http\Controllers\YoutubeController::class, 'overview']);
     Route::post('/youtube/sync', [\App\Http\Controllers\YoutubeController::class, 'sync']);
+    Route::post('/youtube/confirm-upload', [\App\Http\Controllers\YoutubeController::class, 'confirmUpload']);
     // Backsound - upload & pilih backsound untuk video
     Route::get('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'index']);
     Route::post('/backsounds', [\App\Http\Controllers\BacksoundController::class, 'store']);

@@ -75,6 +75,7 @@ export const MODELS = [
     { value: 'narasi', label: 'Narasi', desc: 'Satu narator, visual diam + voiceover', color: 'violet', icon: 'mic' },
     { value: 'ngobrol', label: 'Ngobrol', desc: 'Dialog Ibu (Aria) & Anak (Lumi)', color: 'sky', icon: 'messages-square' },
     { value: 'gabungan', label: 'Gabungan', desc: 'Narator + dialog Ibu & Anak', color: 'orange', icon: 'sparkles' },
+    { value: 'presenter', label: 'Presenter', desc: 'Ibu bercerita langsung ke kamera, latar berganti tiap bagian', color: 'pink', icon: 'video' },
 ];
 export const DURATIONS = [30, 60, 90];
 
@@ -102,6 +103,7 @@ export function workflowColor(v) {
 
 /* Status proses (kolom `status`): Cara 2 via Muse memakai waiting_muse → processing → completed / failed. */
 export const GEN_STATUS = {
+    pending_confirmation: { label: 'Menunggu konfirmasi', color: 'amber', icon: 'hourglass' },
     waiting_muse: { label: 'Menunggu Muse', color: 'sky', icon: 'hourglass' },
     processing: { label: 'Muse memproses', color: 'violet', icon: 'loader-circle' },
     failed: { label: 'Muse gagal', color: 'rose', icon: 'circle-x' },
