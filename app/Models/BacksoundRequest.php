@@ -4,8 +4,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BacksoundRequest extends Model
 {
-    protected $fillable = ['user_id', 'generation_id', 'status', 'note', 'candidate_name', 'candidate_url', 'candidate_source', 'candidate_duration_sec', 'error'];
-    protected $casts = ['candidate_duration_sec' => 'float'];
+    protected $fillable = ['user_id', 'generation_id', 'status', 'note', 'candidate_name', 'candidate_url', 'candidate_source', 'candidate_duration_sec', 'result_video_url', 'applied_volume', 'error'];
+    protected $casts = ['candidate_duration_sec' => 'float', 'applied_volume' => 'integer'];
     /** Status yang masih "terbuka" (belum selesai/dibatalkan). */
     public const OPEN_STATUSES = ['queued', 'searching', 'preview', 'rejected'];
     public function user(): BelongsTo { return $this->belongsTo(User::class); }

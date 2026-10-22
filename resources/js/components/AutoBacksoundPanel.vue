@@ -12,6 +12,7 @@ const props = defineProps({ generationId: { type: Number, required: true } });
 const emit = defineEmits(['updated']);
 
 const autoReq = ref(null);
+const history = ref([]);
 const autoBusy = ref(false);
 const volume = ref(20);
 let autoTimer = null;
@@ -35,8 +36,13 @@ async function loadAuto() {
   try {
     const { data } = await api.get(`/generations/${props.generationId}/auto-backsound`);
     autoReq.value = data.data || null;
+    if (Array.isArray(autoReq.value?.history)) history.value = autoReq.value.history;
   } catch { /* diamkan: panel auto bersifat tambahan */ }
   scheduleAutoPoll();
+}
+function fmtDate(s) {
+  if (!s) return '';
+  try { return new Date(s).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
 }
 async function requestAuto() {
   autoBusy.value = true;
@@ -106,5 +112,17 @@ onUnmounted(() => { clearTimeout(autoTimer); });
         <button class="btn btn-ghost btn-sm" :disabled="autoBusy" @click="cancelAuto">Batalkan</button>
       </div>
     </template>
+    <div v-if="history.length" class="border-t border-slate-100 pt-3">
+      <p class="text-xs font-bold text-slate-600">🎧 Riwayat mix backsound</p>
+      <ul class="mt-2 space-y-2">
+        <li v-for="h in history" :key="h.id" class="flex items-center justify-between gap-2 rounded-lg bg-purple-50 px-3 py-2">
+          <div class="min-w-0">
+            <p class="truncate text-xs font-semibold">{{ h.candidate_name || 'Backsound' }}</p>
+            <p class="text-[11px] text-muted">{{ fmtDate(h.finished_at) }}<span v-if="h.applied_volume != null"> • volume {{ h.applied_volume }}%</span></p>
+          </div>
+          <a v-if="h.result_video_url" :href="h.result_video_url" target="_blank" rel="noopener" class="btn btn-primary btn-sm shrink-0">▶ Putar</a>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>

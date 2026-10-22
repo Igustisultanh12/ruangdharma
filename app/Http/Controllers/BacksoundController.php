@@ -63,7 +63,39 @@ class BacksoundController extends Controller
     public function autoShow(Request $request, $id)
     {
         $g = $this->findOwnedGeneration($request, $id);
-        return response()->json(['success' => true, 'data' => $this->latestAutoRequest($g->id)]);
+        $latest = $this->latestAutoRequest($g->id);
+        if (!$latest) return response()->json(['success' => true, 'data' => null]);
+        $payload = $latest->toArray();
+        // Riwayat hasil mix ditampilkan di bawah panel Auto Backsound (Media + Editor Audio).
+        $payload['history'] = $this->autoHistory($g);
+        return response()->json(['success' => true, 'data' => $payload]);
+    }
+    /**
+     * Riwayat mix Auto Backsound yang sudah selesai untuk video ini (terbaru di atas).
+     * Baris lama (sebelum kolom result_video_url ada) dipasangkan kronologis dengan
+     * file ...-mix-... di video_files yang belum terpakai baris lain.
+     */
+    private function autoHistory(VideoGeneration $g): array
+    {
+        $done = BacksoundRequest::where('generation_id', $g->id)->where('status', 'done')->orderBy('id')->get();
+        $files = is_array($g->video_files) ? $g->video_files : [];
+        $mixFiles = collect($files)->filter(fn ($f) => is_string($f) && str_contains($f, '-mix-'))->values();
+        $used = $done->pluck('result_video_url')->filter()->all();
+        $pool = $mixFiles->reject(fn ($f) => in_array($f, $used, true))->values();
+        $items = [];
+        foreach ($done as $r) {
+            $url = $r->result_video_url;
+            if (!$url && $pool->isNotEmpty()) $url = $pool->shift();
+            $items[] = [
+                'id' => $r->id,
+                'candidate_name' => $r->candidate_name,
+                'candidate_source' => $r->candidate_source,
+                'applied_volume' => $r->applied_volume,
+                'result_video_url' => $url,
+                'finished_at' => $r->updated_at,
+            ];
+        }
+        return array_reverse($items);
     }
     /**
      * User menyetujui kandidat dari preview -> gabungkan ke video.
@@ -88,7 +120,8 @@ class BacksoundController extends Controller
         $response = app(VideoGenerationController::class)->updateBacksound($sub, $g->id);
         $payload = json_decode($response->getContent(), true);
         if ($response->getStatusCode() === 200 && ($payload['success'] ?? false)) {
-            $br->update(['status' => 'done', 'error' => null]);
+            // Simpan hasil mix untuk riwayat di panel: file video hasil mix + volume.
+            $br->update(['status' => 'done', 'error' => null, 'applied_volume' => (int) ($data['volume'] ?? 20), 'result_video_url' => $g->fresh()->video_url]);
             $payload['auto_backsound'] = $br->fresh();
         }
         return response()->json($payload, $response->getStatusCode());
