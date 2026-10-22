@@ -44,6 +44,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/muse/social/publishes/pending', [\App\Http\Controllers\Api\MuseSocialController::class, 'pendingPublishes']);
     Route::post('/muse/social/publish-webhook', [\App\Http\Controllers\Api\MuseSocialController::class, 'publishWebhook']);
     Route::post('/muse/social/stats-webhook', [\App\Http\Controllers\Api\MuseSocialController::class, 'statsWebhook']);
+    Route::get('/muse/social/refresh-pending', [\App\Http\Controllers\Api\MuseSocialController::class, 'refreshPending']);
     // Sinkronisasi YouTube — cek flag, daftar video web, antrekan upload, selesai.
     Route::get('/muse/youtube/sync-pending', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'syncPending']);
     Route::get('/muse/youtube/videos', [\App\Http\Controllers\Api\MuseYoutubeController::class, 'videos']);

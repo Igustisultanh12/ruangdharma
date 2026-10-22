@@ -28,11 +28,20 @@ class MuseSocialController extends Controller
         else $pub->markProcessing();
         return response()->json(['success' => true, 'publish_id' => $pub->id, 'status' => $pub->fresh()->status]);
     }
+    /** Cek apakah user menekan tombol Refresh statistik di halaman Medsos web. */
+    public function refreshPending(Request $request, MuseService $muse)
+    {
+        if ($r = $this->check($request, $muse)) return $r;
+        $at = \App\Models\Setting::query()->where('key', 'social_refresh_requested_at')->value('value');
+        return response()->json(['success' => true, 'requested' => !empty($at), 'requested_at' => $at]);
+    }
     public function statsWebhook(Request $request, MuseService $muse)
     {
         if ($r = $this->check($request, $muse)) return $r;
         $data = $request->validate(['platform' => 'required|in:instagram,facebook,youtube', 'account_username' => 'sometimes|nullable|string|max:100', 'followers' => 'sometimes|integer', 'total_likes' => 'sometimes|integer', 'total_comments' => 'sometimes|integer', 'reach' => 'sometimes|integer', 'views' => 'sometimes|integer', 'posts' => 'sometimes|array', 'recent_comments' => 'sometimes|array', 'daily' => 'sometimes|array']);
         $stat = SocialStat::updateOrCreate(['platform' => $data['platform']], array_merge($data, ['fetched_at' => now()]));
+        // Permintaan refresh dari web dianggap terlayani setelah statistik platform mana pun masuk.
+        \App\Models\Setting::query()->where('key', 'social_refresh_requested_at')->delete();
         return response()->json(['success' => true, 'platform' => $stat->platform, 'fetched_at' => $stat->fetched_at]);
     }
 }
