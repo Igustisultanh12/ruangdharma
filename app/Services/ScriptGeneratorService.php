@@ -77,6 +77,14 @@ class ScriptGeneratorService
                 ['speaker' => 'Anak', 'teks' => 'Aku mau selalu ingat dan mengamalkannya, Bu!'],
                 ['speaker' => 'Ibu', 'teks' => 'Bagus, sayang! Semoga kita selalu bersyukur. ' . self::CLOSING . '.'],
             ],
+            'presenter' => [
+                ['speaker' => 'Ibu', 'teks' => self::OPENING . "! Anak-anak hebat, hari ini Ibu akan bercerita tentang {$judul}. {$intro}"],
+                ['speaker' => 'Ibu', 'teks' => $poin[0] . '.'],
+                ['speaker' => 'Ibu', 'teks' => $poin[1] . '.'],
+                ['speaker' => 'Ibu', 'teks' => $poin[2] . '.'],
+                ['speaker' => 'Ibu', 'teks' => $poin[3] . '.'],
+                ['speaker' => 'Ibu', 'teks' => 'Yuk, kita amalkan dengan hati yang tulus. ' . self::CLOSING . '.'],
+            ],
             default => [ // gabungan
                 ['speaker' => 'Narator', 'teks' => self::OPENING . "! Hari ini kita belajar tentang {$judul}. {$intro}"],
                 ['speaker' => 'Anak', 'teks' => "Ibu, apa itu {$judul}?"],
@@ -112,7 +120,7 @@ class ScriptGeneratorService
             'naskah' => $naskah, 'prompts' => $prompts,
             'caption' => $captionText,
             'caption_parts' => ['hook' => $hook, 'isi' => $hook, 'hashtag' => $hashtags, 'text' => $captionText],
-            'aturan' => ['pembuka' => self::OPENING, 'penutup' => self::CLOSING, 'visual' => '3D Disney/Pixar, 9:16, anak Bali 5 tahun + Ibu, mata besar berkilau, pencahayaan hangat', 'suara' => $model === 'narasi' ? 'Narator tunggal, visual diam tanpa wajah bicara + voiceover' : 'Ibu=Aria, Anak=Lumi, tanpa backsound, satu pembicara per segmen, yang lain diam'],
+            'aturan' => ['pembuka' => self::OPENING, 'penutup' => self::CLOSING, 'visual' => '3D Disney/Pixar, 9:16, anak Bali 5 tahun + Ibu, mata besar berkilau, pencahayaan hangat', 'suara' => $model === 'narasi' ? 'Narator tunggal, visual diam tanpa wajah bicara + voiceover' : ($model === 'presenter' ? 'Presenter tunggal: Ibu bicara langsung ke kamera dengan suara asli video, tanpa backsound' : 'Ibu=Aria, Anak=Lumi, tanpa backsound, satu pembicara per segmen, yang lain diam')],
         ];
     }
 
@@ -153,6 +161,7 @@ class ScriptGeneratorService
     {
         $base = "3D Disney/Pixar cartoon, vertical 9:16, 5-year-old Balinese boy + adult mother, large glossy eyes, warm cinematic lighting, Octane Render";
         if ($model === 'narasi') return "{$base}, SILENT VISUAL ONLY for {$judul} part {$bagian}: back view / hands / objects close-up, NO talking faces, NO mouth movement, NO dialogue, narrator voiceover only.";
+        if ($model === 'presenter') return "3D Disney/Pixar cartoon, vertical 9:16, large glossy eyes, warm cinematic lighting, Octane Render, PRESENTER SHOT for {$judul} part {$bagian}: ONLY the adult Balinese mother on camera as presenter (pink kebaya, frangipani flower in her hair), speaking directly to camera with natural lip-sync and warm smile, Balinese background that changes per part (bale bench, temple gate, small shrine, dusk village, rice terraces). NO child on camera, NO other voices, NO background music.";
         if ($speaker === 'Anak') return "{$base}, ONLY child speaks in {$judul} part {$bagian}, mother silent mouth closed listening and nodding, do not echo child's line.";
         if ($speaker === 'Ibu') return "{$base}, ONLY mother speaks in {$judul} part {$bagian}, child silent mouth closed listening, do not echo mother's line.";
         return "{$base}, scene for {$judul} part {$bagian}.";

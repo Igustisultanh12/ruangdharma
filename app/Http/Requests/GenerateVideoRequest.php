@@ -10,7 +10,7 @@ class GenerateVideoRequest extends FormRequest
         return [
             'keyword' => 'required|string|max:100',
             'durasi' => 'required|integer|in:30,60,90',
-            'model' => 'required|string|in:narasi,ngobrol,gabungan',
+            'model' => 'required|string|in:narasi,ngobrol,gabungan,presenter',
             'via_muse' => 'sometimes|boolean',
             'async' => 'sometimes|boolean',
             // Multi-Muse: profil Muse yang mengerjakan job (opsional; kosong = profil default).
@@ -30,7 +30,7 @@ class GenerateVideoRequest extends FormRequest
             'durasi.required' => 'Durasi wajib dipilih.',
             'durasi.in' => 'Durasi harus 30, 60, atau 90 detik.',
             'model.required' => 'Model video wajib dipilih.',
-            'model.in' => 'Model harus narasi, ngobrol, atau gabungan.',
+            'model.in' => 'Model harus narasi, ngobrol, gabungan, atau presenter.',
         ];
     }
 }

@@ -233,9 +233,9 @@ class MuseService
         } catch (\Throwable) { /* abaikan bila migrasi belum jalan */ }
         return ['connected' => true, 'last_active' => now()->toIso8601String(), 'version' => '1.0.0', 'latency_ms' => (int) ((microtime(true) - $start) * 1000), 'queue_pending' => MuseJob::whereIn('status', ['queued', 'processing'])->count(), 'daily_generations' => VideoGeneration::whereDate('created_at', now()->toDateString())->count(), 'config_source' => $this->getConfigSource(), 'has_token' => (bool) $this->getApiToken(), 'has_webhook_secret' => (bool) $this->getWebhookSecret(), 'muse_base_url' => $this->getBaseUrl(), 'muse_timeout' => $this->getTimeout(), 'muse_profiles_total' => $profilesTotal, 'muse_profiles_active' => $profilesActive];
     }
-    public function createJob(?int $userId, string $keyword, int $durasi, string $model, ?string $callbackUrl = null, ?int $museProfileId = null): MuseJob
+    public function createJob(?int $userId, string $keyword, int $durasi, string $model, ?string $callbackUrl = null, ?int $museProfileId = null, string $status = 'queued'): MuseJob
     {
-        $attrs = ['user_id' => $userId, 'keyword' => $keyword, 'durasi' => $durasi, 'model' => $model, 'status' => 'queued', 'callback_url' => $callbackUrl, 'source' => 'muse_api'];
+        $attrs = ['user_id' => $userId, 'keyword' => $keyword, 'durasi' => $durasi, 'model' => $model, 'status' => $status, 'callback_url' => $callbackUrl, 'source' => 'muse_api'];
         // Tanpa muse_profile_id bila kolom belum ada (migrasi belum jalan) — job tetap dibuat.
         $profileId = $museProfileId ?? $this->defaultProfile()?->id;
         try {

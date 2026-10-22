@@ -10,7 +10,7 @@ class VideoGeneration extends Model
 {
     use HasFactory;
 
-    public const MODELS = ['narasi', 'ngobrol', 'gabungan'];
+    public const MODELS = ['narasi', 'ngobrol', 'gabungan', 'presenter'];
     public const WORKFLOW_STATUSES = ['draft', 'review', 'revisi', 'approved', 'published', 'archived'];
 
     protected $fillable = [
