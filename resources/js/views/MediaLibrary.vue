@@ -9,6 +9,7 @@ import Pagination from '@/components/ui/Pagination.vue';
 import SearchInput from '@/components/ui/SearchInput.vue';
 import Segmented from '@/components/ui/Segmented.vue';
 import Spinner from '@/components/ui/Spinner.vue';
+import AutoBacksoundPanel from '@/components/AutoBacksoundPanel.vue';
 import api, { errorMessage, fieldErrors } from '@/lib/api.js';
 import { bytes, relative } from '@/lib/format.js';
 import { confirmDialog, copyText, toast } from '@/lib/toast.js';
@@ -146,6 +147,11 @@ const canDelete = (m) => m.user_id === auth.user?.id || auth.isAdmin;
                     <video v-else :src="preview.url" controls class="max-h-[60vh] w-full"></video>
                 </div>
                 <div v-if="preview.tags?.length" class="mt-3 flex flex-wrap gap-1.5"><Badge v-for="t in preview.tags" :key="t" color="violet" size="xs">#{{ t }}</Badge></div>
+                <!-- Auto Backsound juga tersedia dari sini (video hasil generate yang terhubung ke Riwayat). -->
+                <div v-if="preview.type === 'video'" class="mt-4">
+                    <AutoBacksoundPanel v-if="preview.generation_id" :key="preview.id" :generation-id="preview.generation_id" @updated="list.load({ silent: true })" />
+                    <p v-else class="text-xs text-muted">Video ini tidak terhubung ke video Riwayat, jadi Auto Backsound belum tersedia untuk file ini. Auto Backsound ada di video hasil generate (lewat Riwayat atau dari sini bila videonya terhubung).</p>
+                </div>
             </template>
             <template #footer>
                 <button v-if="preview && canDelete(preview)" type="button" class="btn btn-soft-danger mr-auto" @click="remove(preview)"><Icon name="trash-2" class="h-4 w-4" /> Hapus</button>
