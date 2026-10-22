@@ -36,8 +36,13 @@ class BacksoundController extends Controller
     // ---------- Auto Backsound (Muse carikan, user preview & setujui dulu) ----------
     private function findOwnedGeneration(Request $request, $id): VideoGeneration
     {
+        // Samakan dengan VideoGenerationController::findAccessible (dipakai Editor Audio):
+        // pemilik boleh, dan reviewer (admin/super_admin/editor) boleh untuk semua video.
+        // Cek pemilik-saja di sini sebelumnya membuat admin yang membuka video milik akun
+        // lain (mis. dari halaman Media) ditolak 403 saat menekan "Minta Auto Backsound".
         $g = VideoGeneration::findOrFail($id);
-        if ($g->user_id !== $request->user()->id) abort(403);
+        $user = $request->user();
+        if ($g->user_id !== $user->id && !$user->hasAnyRole(['admin', 'super_admin', 'editor'])) abort(403);
         return $g;
     }
     private function latestAutoRequest($generationId): ?BacksoundRequest
