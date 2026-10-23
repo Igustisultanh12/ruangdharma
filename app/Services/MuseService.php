@@ -233,9 +233,13 @@ class MuseService
         } catch (\Throwable) { /* abaikan bila migrasi belum jalan */ }
         return ['connected' => true, 'last_active' => now()->toIso8601String(), 'version' => '1.0.0', 'latency_ms' => (int) ((microtime(true) - $start) * 1000), 'queue_pending' => MuseJob::whereIn('status', ['queued', 'processing'])->count(), 'daily_generations' => VideoGeneration::whereDate('created_at', now()->toDateString())->count(), 'config_source' => $this->getConfigSource(), 'has_token' => (bool) $this->getApiToken(), 'has_webhook_secret' => (bool) $this->getWebhookSecret(), 'muse_base_url' => $this->getBaseUrl(), 'muse_timeout' => $this->getTimeout(), 'muse_profiles_total' => $profilesTotal, 'muse_profiles_active' => $profilesActive];
     }
-    public function createJob(?int $userId, string $keyword, int $durasi, string $model, ?string $callbackUrl = null, ?int $museProfileId = null, string $status = 'queued'): MuseJob
+    public function createJob(?int $userId, string $keyword, int $durasi, string $model, ?string $callbackUrl = null, ?int $museProfileId = null, string $status = 'queued', ?string $voiceSource = null): MuseJob
     {
         $attrs = ['user_id' => $userId, 'keyword' => $keyword, 'durasi' => $durasi, 'model' => $model, 'status' => $status, 'callback_url' => $callbackUrl, 'source' => 'muse_api'];
+        // Sumber suara (flow/elevenlabs) — hanya ditulis bila kolomnya sudah ada (migrasi 000023).
+        try {
+            if ($voiceSource && Schema::hasColumn('muse_jobs', 'voice_source')) $attrs['voice_source'] = $voiceSource;
+        } catch (\Throwable) { /* abaikan */ }
         // Tanpa muse_profile_id bila kolom belum ada (migrasi belum jalan) — job tetap dibuat.
         $profileId = $museProfileId ?? $this->defaultProfile()?->id;
         try {
@@ -268,6 +272,10 @@ class MuseService
             // Jika VideoGeneration draft sudah ada (dari generate async via web), update itu. Jika belum ada, buat baru.
             $existing = VideoGeneration::where('muse_job_id', $job->id)->first();
             $attrs = ['user_id' => $job->user_id, 'keyword' => $job->keyword, 'durasi' => $job->durasi, 'model' => $job->model, 'naskah' => $result['naskah'] ?? [], 'caption' => static::captionText($result['caption'] ?? null), 'prompts' => $result['prompts'] ?? [], 'status' => 'completed', 'source' => 'muse', 'muse_job_id' => $job->id, 'video_url' => $videoUrl, 'video_files' => $videoFiles];
+            // Pertahankan pilihan sumber suara dari job (generation yang sudah ada tidak tertimpa default).
+            try {
+                if (Schema::hasColumn('video_generations', 'voice_source') && !$existing) $attrs['voice_source'] = $job->voice_source ?? 'flow';
+            } catch (\Throwable) { /* abaikan */ }
             if ($existing) $existing->update($attrs);
             else VideoGeneration::create($attrs + ['workflow_status' => 'draft']);
             NotificationService::notify($job->user, 'Video via Muse selesai', "Video \"{$job->keyword}\" dari Muse sudah jadi" . ($videoUrl ? ' lengkap dengan file videonya.' : '.'));

@@ -79,6 +79,18 @@ export const MODELS = [
 ];
 export const DURATIONS = [30, 60, 90];
 
+/* Sumber suara untuk video via Muse (kolom voice_source). */
+export const VOICE_SOURCES = [
+    { value: 'flow', label: 'Muse (Google Flow)', short: 'Google Flow', desc: 'Dialog asli dari klip video Flow', icon: 'film' },
+    { value: 'elevenlabs', label: 'ElevenLabs', short: 'ElevenLabs', desc: 'Suara dibuat ElevenLabs — visual tetap dari Flow, dialog bawaan dimatikan', icon: 'mic' },
+];
+export function voiceSourceLabel(v) {
+    return VOICE_SOURCES.find((s) => s.value === v)?.label || 'Muse (Google Flow)';
+}
+export function voiceSourceShort(v) {
+    return VOICE_SOURCES.find((s) => s.value === v)?.short || 'Google Flow';
+}
+
 export function modelLabel(v) {
     return MODELS.find((m) => m.value === v)?.label || v || '—';
 }

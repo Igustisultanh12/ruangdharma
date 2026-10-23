@@ -98,9 +98,9 @@ class VideoGenerationController extends Controller
                 return response()->json(['success' => false, 'message' => $resolved['error']], 422);
             }
             $profile = $resolved['profile'];
-            $job = app(MuseService::class)->createJob($user->id, $keyword, (int) $data['durasi'], $data['model'], null, $profile?->id);
+            $job = app(MuseService::class)->createJob($user->id, $keyword, (int) $data['durasi'], $data['model'], null, $profile?->id, 'queued', $data['voice_source'] ?? 'flow');
             $g = VideoGeneration::create([
-                'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'],
+                'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'], 'voice_source' => $data['voice_source'] ?? 'flow',
                 'naskah' => [], 'caption' => 'Menunggu Muse — video sedang dibuat...', 'prompts' => [],
                 'status' => 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft',
                 'backsound_url' => $data['backsound_url'] ?? null, 'backsound_volume' => $data['backsound_volume'] ?? 20,
@@ -119,7 +119,7 @@ class VideoGenerationController extends Controller
 
         $result = $gen->generate($keyword, (int) $data['durasi'], $data['model']);
         $g = VideoGeneration::create([
-            'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'],
+            'user_id' => $user->id, 'keyword' => $keyword, 'durasi' => (int) $data['durasi'], 'model' => $data['model'], 'voice_source' => $data['voice_source'] ?? 'flow',
             'naskah' => $result['naskah'], 'caption' => $result['caption'], 'prompts' => $result['prompts'],
             'status' => 'completed', 'source' => 'local', 'workflow_status' => 'draft',
             'backsound_url' => $data['backsound_url'] ?? null, 'backsound_volume' => $data['backsound_volume'] ?? 20,

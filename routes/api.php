@@ -55,6 +55,8 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/muse/backsound/pending', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'pending']);
     Route::post('/muse/backsound/status', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'status']);
     Route::post('/muse/backsound/candidate', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'candidate']);
+    Route::get('/muse/elevenlabs/config', [\App\Http\Controllers\Api\MuseElevenLabsController::class, 'config']);
+    Route::post('/muse/elevenlabs/tts', [\App\Http\Controllers\Api\MuseElevenLabsController::class, 'tts']);
 });
 
 // ---------- Eksternal via X-Api-Key ----------
@@ -191,6 +193,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/muse-config', [MuseConfigController::class, 'update']);
         Route::post('/muse-config/test', [MuseConfigController::class, 'test']);
         Route::get('/muse-config/token-usage', [\App\Http\Controllers\Admin\MuseTokenUsageController::class, 'index']);
+
+        // Pengaturan ElevenLabs (API key terenkripsi, tidak pernah dikembalikan utuh)
+        Route::get('/elevenlabs', [\App\Http\Controllers\Admin\ElevenLabsController::class, 'show']);
+        Route::put('/elevenlabs', [\App\Http\Controllers\Admin\ElevenLabsController::class, 'update']);
+        Route::get('/elevenlabs/voices', [\App\Http\Controllers\Admin\ElevenLabsController::class, 'voices']);
 
         // Profil Muse (multi-Muse) — CRUD admin. Semua respons hanya membawa token masked, kecuali reveal (throttle, hanya admin, dicatat tanpa nilai).
         Route::get('/muse-profiles', [MuseProfileController::class, 'index']);

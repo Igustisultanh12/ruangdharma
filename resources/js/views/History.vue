@@ -135,7 +135,7 @@ const regenerate = (g) => router.push({ path: '/generate', query: { keyword: g.k
                                 <p class="flex items-center gap-1.5 font-bold">{{ g.keyword }} <Badge v-if="g.video_url" color="sky" icon="film" size="xs">Video</Badge><Badge v-if="g.muse_profile_name" color="violet" size="xs">{{ g.muse_profile_name }}</Badge></p>
                                 <p class="max-w-xs truncate text-xs text-muted">{{ partText((g.naskah || [])[0]) }}</p>
                             </td>
-                            <td><Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge></td>
+                            <td><Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge> <Badge v-if="g.voice_source === 'elevenlabs'" color="emerald" size="xs">ElevenLabs</Badge></td>
                             <td class="tabular-nums">{{ g.durasi }} dtk</td>
                             <td><Badge v-if="GEN_STATUS[g.status]" :color="GEN_STATUS[g.status].color" :icon="GEN_STATUS[g.status].icon">{{ GEN_STATUS[g.status].label }}</Badge><Badge v-else :color="workflowColor(g.workflow_status)" dot>{{ workflowLabel(g.workflow_status) }}</Badge></td>
                             <td class="whitespace-nowrap text-muted">{{ relative(g.created_at) }}</td>
@@ -162,6 +162,7 @@ const regenerate = (g) => router.push({ path: '/generate', query: { keyword: g.k
                     <div class="mt-4 flex items-center gap-2 text-xs">
                         <Badge v-if="g.muse_profile_name" color="violet" size="xs">{{ g.muse_profile_name }}</Badge>
                         <Badge :color="modelColor(g.model)" size="xs">{{ modelLabel(g.model) }}</Badge>
+                        <Badge v-if="g.voice_source === 'elevenlabs'" color="emerald" size="xs">ElevenLabs</Badge>
                         <span class="font-semibold">{{ g.durasi }} dtk</span>
                         <span class="ml-auto text-muted">{{ relative(g.created_at) }}</span>
                     </div>

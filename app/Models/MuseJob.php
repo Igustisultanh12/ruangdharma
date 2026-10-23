@@ -9,7 +9,7 @@ class MuseJob extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'keyword', 'durasi', 'model', 'status', 'result', 'error', 'callback_url', 'source', 'completed_at', 'muse_profile_id'];
+    protected $fillable = ['user_id', 'keyword', 'durasi', 'model', 'voice_source', 'status', 'result', 'error', 'callback_url', 'source', 'completed_at', 'muse_profile_id'];
     protected $casts = ['result' => 'array', 'durasi' => 'integer', 'completed_at' => 'datetime', 'muse_profile_id' => 'integer'];
 
     public function user(): BelongsTo { return $this->belongsTo(User::class); }

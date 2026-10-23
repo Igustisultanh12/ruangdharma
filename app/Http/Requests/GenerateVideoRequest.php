@@ -11,6 +11,8 @@ class GenerateVideoRequest extends FormRequest
             'keyword' => 'required|string|max:100',
             'durasi' => 'required|integer|in:30,60,90',
             'model' => 'required|string|in:narasi,ngobrol,gabungan,presenter',
+            // Sumber suara untuk video via Muse: flow = dialog asli Google Flow; elevenlabs = TTS ElevenLabs.
+            'voice_source' => 'sometimes|string|in:flow,elevenlabs',
             'via_muse' => 'sometimes|boolean',
             'async' => 'sometimes|boolean',
             // Multi-Muse: profil Muse yang mengerjakan job (opsional; kosong = profil default).
