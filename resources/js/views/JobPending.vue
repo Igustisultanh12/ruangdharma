@@ -4,7 +4,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import api, { errorMessage } from '@/lib/api.js';
-import { dateTime, MODELS, voiceSourceShort } from '@/lib/format.js';
+import { dateTime, engineShort, MODELS } from '@/lib/format.js';
 import { toast, confirmDialog } from '@/lib/toast.js';
 
 const loading = ref(false);
@@ -29,7 +29,7 @@ async function loadFirst() {
   loading.value = false;
 }
 async function confirmJob(g) {
-  const ok = await confirmDialog({ title: 'Konfirmasi job ini?', message: `Video "${g.keyword}" (${modelLabel(g.model)}, ${g.durasi} dtk, suara ${voiceSourceShort(g.voice_source)}) akan langsung dibuat oleh Muse sekarang.`, confirmText: 'Ya, Buat Sekarang', tone: 'primary' });
+  const ok = await confirmDialog({ title: 'Konfirmasi job ini?', message: `Video "${g.keyword}" (${modelLabel(g.model)}, ${g.durasi} dtk, generate pakai ${engineShort(g.engine)}) akan langsung dibuat oleh Muse sekarang.`, confirmText: 'Ya, Buat Sekarang', tone: 'primary' });
   if (!ok) return;
   acting.value = g.id;
   try {
@@ -74,7 +74,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div v-for="g in jobs" :key="g.id" class="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div class="min-w-0">
           <p class="font-bold">{{ g.keyword }}</p>
-          <p class="text-xs text-muted">{{ modelLabel(g.model) }} • {{ g.durasi }} dtk • suara {{ voiceSourceShort(g.voice_source) }} • disiapkan {{ dateTime(g.created_at) }} • tanpa backsound</p>
+          <p class="text-xs text-muted">{{ modelLabel(g.model) }} • {{ g.durasi }} dtk • generate {{ engineShort(g.engine) }} • disiapkan {{ dateTime(g.created_at) }} • tanpa backsound</p>
         </div>
         <div class="flex items-center gap-2">
           <Badge color="amber" icon="hourglass">Menunggu konfirmasi</Badge>

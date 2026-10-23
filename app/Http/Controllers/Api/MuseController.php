@@ -33,12 +33,12 @@ class MuseController extends Controller
         if ($r = $this->checkMuseToken($request, $muse)) return $r;
         $data = $request->validate([
             'keyword' => 'required|string|max:100', 'durasi' => 'sometimes|in:30,60,90',
-            'model' => 'sometimes|in:narasi,ngobrol,gabungan,presenter', 'voice_source' => 'sometimes|in:flow,elevenlabs', 'user_id' => 'sometimes|nullable|integer|exists:users,id',
+            'model' => 'sometimes|in:narasi,ngobrol,gabungan,presenter', 'engine' => 'sometimes|in:flow,elevenlabs', 'voice_source' => 'sometimes|in:flow,elevenlabs', 'user_id' => 'sometimes|nullable|integer|exists:users,id',
             'callback_url' => 'sometimes|nullable|url',
             'async' => 'sometimes|boolean', 'via_muse' => 'sometimes|boolean', 'draft' => 'sometimes|boolean',
             'muse_profile_id' => 'sometimes|nullable|integer',
         ]);
-        $durasi = (int) ($data['durasi'] ?? 60); $model = $data['model'] ?? 'narasi'; $voiceSource = $data['voice_source'] ?? 'flow';
+        $durasi = (int) ($data['durasi'] ?? 60); $model = $data['model'] ?? 'narasi'; $engine = $data['engine'] ?? $data['voice_source'] ?? 'flow';
         $async = !empty($data['async']) || !empty($data['via_muse']);
         if ($blocked = $quota->isBlocked($data['keyword'])) return response()->json(['success' => false, 'message' => "Kata kunci '{$blocked}' diblokir."], 422);
         $user = isset($data['user_id']) ? User::find($data['user_id']) : null;
@@ -47,16 +47,16 @@ class MuseController extends Controller
         if ($resolved['error']) return response()->json(['success' => false, 'message' => $resolved['error']], 422);
         $profile = $resolved['profile'];
         $draft = $async && !empty($data['draft']);
-        $job = $muse->createJob($user?->id, $data['keyword'], $durasi, $model, $data['callback_url'] ?? null, $profile?->id, $draft ? 'pending_confirmation' : 'queued', $voiceSource);
+        $job = $muse->createJob($user?->id, $data['keyword'], $durasi, $model, $data['callback_url'] ?? null, $profile?->id, $draft ? 'pending_confirmation' : 'queued', $engine);
         // Cara 2 — Generate via Muse (video beneran): job dibuat status queued, TIDAK langsung completed.
         // Muse di chat akan melihat job ini (GET /api/muse/jobs/pending), generate video, lalu kirim hasil via POST /api/muse/webhook.
         // Draft (draft=true): job berstatus pending_confirmation — TIDAK muncul di pending Muse dan TIDAK digenerate
         // sampai admin mengonfirmasi lewat menu Job Pending (POST /generations/{id}/confirm-job).
         if ($async) {
             if ($user) {
-                \App\Models\VideoGeneration::create(['user_id' => $user->id, 'keyword' => $data['keyword'], 'durasi' => $durasi, 'model' => $model, 'voice_source' => $voiceSource, 'naskah' => [], 'caption' => $draft ? 'Menunggu konfirmasi admin sebelum video dibuat Muse.' : 'Menunggu Muse — video sedang dibuat...', 'prompts' => [], 'status' => $draft ? 'pending_confirmation' : 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
+                \App\Models\VideoGeneration::create(['user_id' => $user->id, 'keyword' => $data['keyword'], 'durasi' => $durasi, 'model' => $model, 'engine' => $engine, 'naskah' => [], 'caption' => $draft ? 'Menunggu konfirmasi admin sebelum video dibuat Muse.' : 'Menunggu Muse — video sedang dibuat...', 'prompts' => [], 'status' => $draft ? 'pending_confirmation' : 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
             }
-            return response()->json(['success' => true, 'job_id' => $job->id, 'status' => $draft ? 'pending_confirmation' : 'queued', 'keyword' => $job->keyword, 'durasi' => $durasi, 'model' => $model, 'voice_source' => $voiceSource, 'muse_profile_id' => $job->muse_profile_id, 'muse_profile_name' => $profile?->name, 'message' => $draft ? 'Job draft dibuat, menunggu konfirmasi admin di menu Job Pending sebelum digenerate.' : 'Job dibuat, menunggu Muse generate video. Muse akan kirim hasil via webhook.', 'next_step' => $draft ? 'Admin mengonfirmasi job di menu Job Pending web.' : 'Di chat Muse, jalankan: python3 ~/workspace/custom-connectors/custom.ruangdharma/bin/ruangdharma.py pending'], 201);
+            return response()->json(['success' => true, 'job_id' => $job->id, 'status' => $draft ? 'pending_confirmation' : 'queued', 'keyword' => $job->keyword, 'durasi' => $durasi, 'model' => $model, 'engine' => $engine, 'voice_source' => $engine, 'muse_profile_id' => $job->muse_profile_id, 'muse_profile_name' => $profile?->name, 'message' => $draft ? 'Job draft dibuat, menunggu konfirmasi admin di menu Job Pending sebelum digenerate.' : 'Job dibuat, menunggu Muse generate video. Muse akan kirim hasil via webhook.', 'next_step' => $draft ? 'Admin mengonfirmasi job di menu Job Pending web.' : 'Di chat Muse, jalankan: python3 ~/workspace/custom-connectors/custom.ruangdharma/bin/ruangdharma.py pending'], 201);
         }
         try {
             $result = $gen->generate($data['keyword'], $durasi, $model);

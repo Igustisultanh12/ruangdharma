@@ -28,6 +28,7 @@ class ElevenLabsController extends Controller
             'voice_anak' => 'sometimes|nullable|string|max:100',
             'voice_narator' => 'sometimes|nullable|string|max:100',
             'model_id' => 'sometimes|nullable|string|max:100',
+            'video_model' => 'sometimes|nullable|string|max:100',
         ]);
         $changed = [];
         if (!empty($data['remove_api_key'])) {
@@ -37,7 +38,7 @@ class ElevenLabsController extends Controller
             Setting::set(ElevenLabsService::KEY_API_KEY, encrypt($data['api_key']));
             $changed[] = 'api_key';
         }
-        foreach (['voice_ibu' => ElevenLabsService::KEY_VOICE_IBU, 'voice_anak' => ElevenLabsService::KEY_VOICE_ANAK, 'voice_narator' => ElevenLabsService::KEY_VOICE_NARATOR, 'model_id' => ElevenLabsService::KEY_MODEL_ID] as $field => $key) {
+        foreach (['voice_ibu' => ElevenLabsService::KEY_VOICE_IBU, 'voice_anak' => ElevenLabsService::KEY_VOICE_ANAK, 'voice_narator' => ElevenLabsService::KEY_VOICE_NARATOR, 'model_id' => ElevenLabsService::KEY_MODEL_ID, 'video_model' => ElevenLabsService::KEY_VIDEO_MODEL] as $field => $key) {
             if (array_key_exists($field, $data)) {
                 Setting::set($key, $data[$field] ?? '');
                 $changed[] = $field;

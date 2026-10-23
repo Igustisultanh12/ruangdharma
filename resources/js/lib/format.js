@@ -79,17 +79,21 @@ export const MODELS = [
 ];
 export const DURATIONS = [30, 60, 90];
 
-/* Sumber suara untuk video via Muse (kolom voice_source). */
-export const VOICE_SOURCES = [
-    { value: 'flow', label: 'Muse (Google Flow)', short: 'Google Flow', desc: 'Dialog asli dari klip video Flow', icon: 'film' },
-    { value: 'elevenlabs', label: 'ElevenLabs', short: 'ElevenLabs', desc: 'Suara dibuat ElevenLabs — visual tetap dari Flow, dialog bawaan dimatikan', icon: 'mic' },
+/* Mesin generate video via Muse (kolom engine): video + audio dibuat platform yang dipilih. */
+export const GENERATE_ENGINES = [
+    { value: 'flow', label: 'Google Flow', short: 'Google Flow', desc: 'Video + audio dibuat Google Flow (Veo)', icon: 'film' },
+    { value: 'elevenlabs', label: 'ElevenLabs', short: 'ElevenLabs', desc: 'Video + audio dibuat ElevenLabs', icon: 'mic' },
 ];
-export function voiceSourceLabel(v) {
-    return VOICE_SOURCES.find((s) => s.value === v)?.label || 'Muse (Google Flow)';
+export function engineLabel(v) {
+    return GENERATE_ENGINES.find((s) => s.value === v)?.label || 'Google Flow';
 }
-export function voiceSourceShort(v) {
-    return VOICE_SOURCES.find((s) => s.value === v)?.short || 'Google Flow';
+export function engineShort(v) {
+    return GENERATE_ENGINES.find((s) => s.value === v)?.short || 'Google Flow';
 }
+/* Alias lama (voice_source) — dipertahankan agar impor lama tidak rusak. */
+export const VOICE_SOURCES = GENERATE_ENGINES;
+export const voiceSourceLabel = engineLabel;
+export const voiceSourceShort = engineShort;
 
 export function modelLabel(v) {
     return MODELS.find((m) => m.value === v)?.label || v || '—';

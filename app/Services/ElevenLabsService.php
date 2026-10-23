@@ -20,7 +20,11 @@ class ElevenLabsService
     public const KEY_VOICE_ANAK = 'elevenlabs_voice_anak';
     public const KEY_VOICE_NARATOR = 'elevenlabs_voice_narator';
     public const KEY_MODEL_ID = 'elevenlabs_model_id';
+    public const KEY_VIDEO_MODEL = 'elevenlabs_video_model';
     public const DEFAULT_MODEL_ID = 'eleven_multilingual_v2';
+    public const DEFAULT_VIDEO_MODEL = 'veo-3.1-fast-generate-001';
+    /** Model video yang tersedia lewat API Image & Video / Flows (docs ElevenLabs, Okt 2026). */
+    public const VIDEO_MODELS = ['veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'bytedance-seedance-v2', 'bytedance-seedance-v2-fast', 'bytedance-seedance-v2-mini', 'bytedance-seedance-v2.5', 'creatify-aurora'];
     public const ROLES = ['ibu', 'anak', 'narator'];
     private const BASE = 'https://api.elevenlabs.io/v1';
 
@@ -45,6 +49,11 @@ class ElevenLabsService
         return Setting::get(self::KEY_MODEL_ID, self::DEFAULT_MODEL_ID) ?: self::DEFAULT_MODEL_ID;
     }
 
+    public function videoModel(): string
+    {
+        return Setting::get(self::KEY_VIDEO_MODEL, self::DEFAULT_VIDEO_MODEL) ?: self::DEFAULT_VIDEO_MODEL;
+    }
+
     public function voiceIdForRole(string $role): ?string
     {
         $key = match ($role) {
@@ -66,6 +75,7 @@ class ElevenLabsService
             'voice_anak' => $this->voiceIdForRole('anak'),
             'voice_narator' => $this->voiceIdForRole('narator'),
             'model_id' => $this->modelId(),
+            'video_model' => $this->videoModel(),
         ];
     }
 
@@ -105,5 +115,56 @@ class ElevenLabsService
             throw new RuntimeException('ElevenLabs gagal membuat suara: ' . $msg);
         }
         return $res->body();
+    }
+
+    /**
+     * Submit generate video ke Image & Video API (Flows) — ASINKRON.
+     * POST /v1/flows/video dengan body satu objek berkunci nama model
+     * (satu request = satu model), mis. {"veo-3.1-fast-generate-001": {prompt, aspect_ratio, ...}}.
+     * Mengembalikan respons API apa adanya (berisi generation id + status awal).
+     * Syarat dari docs: plan Pro ke atas + API key berizin Image & Video / Flows,
+     * jika tidak API membalas 402 paid_plan_required / 403.
+     */
+    public function submitVideo(array $params, ?string $modelId = null): array
+    {
+        $key = $this->apiKey();
+        if (!$key) throw new RuntimeException('API key ElevenLabs belum diatur admin (Pengaturan → ElevenLabs).');
+        $model = $modelId ?: $this->videoModel();
+        // PENTING (docs): tiap model punya request class sendiri dan field yang tidak
+        // dikenal model itu DITOLAK (bukan diabaikan) — jadi parameter disaring per model.
+        $allowed = match (true) {
+            str_starts_with($model, 'veo-') => ['prompt', 'aspect_ratio', 'duration_secs', 'resolution', 'generate_audio', 'negative_prompt', 'seed', 'enhance_prompt', 'start_frame', 'end_frame', 'images', 'webhook'],
+            str_starts_with($model, 'bytedance-seedance') => ['prompt', 'aspect_ratio', 'duration_secs', 'resolution', 'generate_audio', 'seed', 'start_frame', 'end_frame', 'images', 'videos', 'audios', 'webhook'],
+            $model === 'creatify-aurora' => ['image', 'audio', 'resolution', 'guidance_scale', 'audio_guidance_scale', 'webhook'],
+            default => ['prompt', 'aspect_ratio', 'duration_secs', 'resolution', 'generate_audio', 'seed', 'webhook'],
+        };
+        $clean = [];
+        foreach ($allowed as $k) {
+            if (array_key_exists($k, $params) && $params[$k] !== null && $params[$k] !== '') $clean[$k] = $params[$k];
+        }
+        if (empty($clean['prompt']) && $model !== 'creatify-aurora') throw new RuntimeException('Prompt video wajib diisi.');
+        $res = Http::timeout(120)->withHeaders(['xi-api-key' => $key])->post(self::BASE . '/flows/video', [$model => $clean]);
+        if (!$res->successful()) {
+            $msg = $res->json('detail.message') ?? $res->json('detail') ?? ('HTTP ' . $res->status());
+            if (is_array($msg)) $msg = json_encode($msg);
+            throw new RuntimeException('ElevenLabs gagal submit video (HTTP ' . $res->status() . '): ' . $msg);
+        }
+        $json = $res->json();
+        return is_array($json) ? $json : [];
+    }
+
+    /** Status + hasil satu generate video (GET /v1/flows/video/{id}) — respons API apa adanya. */
+    public function videoGeneration(string $generationId): array
+    {
+        $key = $this->apiKey();
+        if (!$key) throw new RuntimeException('API key ElevenLabs belum diatur admin (Pengaturan → ElevenLabs).');
+        $res = Http::timeout(60)->withHeaders(['xi-api-key' => $key])->get(self::BASE . '/flows/video/' . $generationId);
+        if (!$res->successful()) {
+            $msg = $res->json('detail.message') ?? $res->json('detail') ?? ('HTTP ' . $res->status());
+            if (is_array($msg)) $msg = json_encode($msg);
+            throw new RuntimeException('ElevenLabs gagal membaca status video (HTTP ' . $res->status() . '): ' . $msg);
+        }
+        $json = $res->json();
+        return is_array($json) ? $json : [];
     }
 }

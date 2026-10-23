@@ -11,12 +11,12 @@ class VideoGeneration extends Model
     use HasFactory;
 
     public const MODELS = ['narasi', 'ngobrol', 'gabungan', 'presenter'];
-    /** Sumber suara video via Muse: flow = dialog asli klip Google Flow; elevenlabs = TTS ElevenLabs (visual Flow di-mute). */
-    public const VOICE_SOURCES = ['flow', 'elevenlabs'];
+    /** Mesin generate video via Muse: flow = video+audio Google Flow (Veo); elevenlabs = video+audio ElevenLabs. */
+    public const ENGINES = ['flow', 'elevenlabs'];
     public const WORKFLOW_STATUSES = ['draft', 'review', 'revisi', 'approved', 'published', 'archived'];
 
     protected $fillable = [
-        'user_id', 'keyword', 'durasi', 'model', 'voice_source', 'naskah', 'caption', 'prompts',
+        'user_id', 'keyword', 'durasi', 'model', 'engine', 'naskah', 'caption', 'prompts',
         'status', 'source', 'muse_job_id', 'video_url', 'video_files',
         'is_favorite', 'is_archived',
         'workflow_status', 'review_note', 'reviewed_by', 'reviewed_at', 'publish_at',

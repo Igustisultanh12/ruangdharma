@@ -57,6 +57,8 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::post('/muse/backsound/candidate', [\App\Http\Controllers\Api\MuseBacksoundController::class, 'candidate']);
     Route::get('/muse/elevenlabs/config', [\App\Http\Controllers\Api\MuseElevenLabsController::class, 'config']);
     Route::post('/muse/elevenlabs/tts', [\App\Http\Controllers\Api\MuseElevenLabsController::class, 'tts']);
+    Route::post('/muse/elevenlabs/video', [\App\Http\Controllers\Api\MuseElevenLabsController::class, 'submitVideo']);
+    Route::get('/muse/elevenlabs/video/{generationId}', [\App\Http\Controllers\Api\MuseElevenLabsController::class, 'videoStatus']);
 });
 
 // ---------- Eksternal via X-Api-Key ----------

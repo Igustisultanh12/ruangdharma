@@ -12,7 +12,7 @@ import Segmented from '@/components/ui/Segmented.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import api, { errorMessage } from '@/lib/api.js';
 import { saveText } from '@/lib/download.js';
-import { captionText, DURATIONS, GEN_STATUS, generationToText, MODELS, partText, VOICE_SOURCES, voiceSourceShort } from '@/lib/format.js';
+import { captionText, DURATIONS, engineShort, GENERATE_ENGINES, GEN_STATUS, generationToText, MODELS, partText } from '@/lib/format.js';
 import { copyText, toast } from '@/lib/toast.js';
 import { useRealtime } from '@/composables/useRealtime.js';
 import { useAuthStore } from '@/stores/auth.js';
@@ -37,7 +37,7 @@ const tab = ref('naskah');
 const detailId = ref(null);
 const sending = ref(false);
 const viaMuse = ref(false);
-const voiceSource = ref('flow');
+const engine = ref('flow');
 const museProfiles = ref([]);
 const selectedMuseProfile = ref(null);
 async function loadMuseProfiles() {
@@ -62,7 +62,7 @@ async function refreshMuse() {
         museGen.value = g;
         if (g.status === 'completed') {
             generation.value = g;
-            result.value = { judul: g.keyword, keyword: g.keyword, durasi: g.durasi, model: g.model, voice_source: g.voice_source, naskah: g.naskah || [], prompts: g.prompts || [], caption: captionText(g.caption), video_url: g.video_url, video_files: g.video_files };
+            result.value = { judul: g.keyword, keyword: g.keyword, durasi: g.durasi, model: g.model, engine: g.engine, naskah: g.naskah || [], prompts: g.prompts || [], caption: captionText(g.caption), video_url: g.video_url, video_files: g.video_files };
             tab.value = g.video_url ? 'video' : 'naskah';
         }
     } catch {
@@ -95,7 +95,7 @@ async function generate() {
     step.value = 0;
     const ticker = setInterval(() => step.value < STEPS.length - 1 && step.value++, 650);
     try {
-        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, voice_source: voiceSource.value, muse_profile_id: selectedMuseProfile.value || null, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd }), wait(STEPS.length * 650)]);
+        const [res] = await Promise.all([api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, engine: engine.value, muse_profile_id: selectedMuseProfile.value || null, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd }), wait(STEPS.length * 650)]);
         step.value = STEPS.length - 1;
         await wait(350);
         result.value = res.data.result;
@@ -117,7 +117,7 @@ async function generateViaMuse() {
     error.value = null;
     result.value = null;
     try {
-        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, voice_source: voiceSource.value, via_muse: true, muse_profile_id: selectedMuseProfile.value || null, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd });
+        const { data } = await api.post('/generations', { keyword: keyword.value.trim(), durasi: durasi.value, model: model.value, engine: engine.value, via_muse: true, muse_profile_id: selectedMuseProfile.value || null, backsound_url: backsound.value.url || null, backsound_volume: backsound.value.volume, backsound_trim_start: backsound.value.trimStart, backsound_trim_end: backsound.value.trimEnd });
         museGen.value = data.generation;
         rt.pulseNow();
     } catch (e) {
@@ -213,14 +213,14 @@ function download() {
                 </div>
 
                 <div v-if="viaMuse">
-                    <p class="label">Sumber suara</p>
+                    <p class="label">Generate pakai</p>
                     <div class="grid grid-cols-2 gap-2">
-                        <button v-for="vs in VOICE_SOURCES" :key="vs.value" type="button" :class="voiceSource === vs.value ? 'border-ink bg-card shadow-brutal-sm' : 'border-line hover:border-violet-300'" class="rounded-2xl border-2 px-3 py-2.5 text-left transition" @click="voiceSource = vs.value">
-                            <span class="flex items-center gap-1.5 text-sm font-bold"><Icon :name="vs.icon" class="h-4 w-4" /> {{ vs.label }}</span>
-                            <span class="mt-0.5 block text-xs text-muted">{{ vs.desc }}</span>
+                        <button v-for="en in GENERATE_ENGINES" :key="en.value" type="button" :class="engine === en.value ? 'border-ink bg-card shadow-brutal-sm' : 'border-line hover:border-violet-300'" class="rounded-2xl border-2 px-3 py-2.5 text-left transition" @click="engine = en.value">
+                            <span class="flex items-center gap-1.5 text-sm font-bold"><Icon :name="en.icon" class="h-4 w-4" /> {{ en.label }}</span>
+                            <span class="mt-0.5 block text-xs text-muted">{{ en.desc }}</span>
                         </button>
                     </div>
-                    <p v-if="voiceSource === 'elevenlabs'" class="mt-1 text-xs text-muted">Suara dibuat dari API key &amp; Voice ID ElevenLabs yang diatur admin di Pengaturan → ElevenLabs. Visual tetap dibuat Muse lewat Google Flow tanpa dialog bawaan.</p>
+                    <p v-if="engine === 'elevenlabs'" class="mt-1 text-xs text-muted">Video dibuat di platform ElevenLabs (Image &amp; Video) dan suaranya memakai API key &amp; Voice ID yang diatur admin di Pengaturan → ElevenLabs.</p>
                 </div>
 
                 <div class="rounded-2xl bg-surface-2 p-3">
@@ -252,7 +252,7 @@ function download() {
                 <div class="flex flex-wrap items-center gap-4 border-b-2 border-ink bg-sky-300 p-5 text-zinc-900">
                     <span class="grid h-12 w-12 place-items-center rounded-2xl border-2 border-ink bg-white"><Icon :name="museGen.status === 'failed' ? 'circle-x' : 'film'" class="h-6 w-6" /></span>
                     <div class="min-w-0 flex-1">
-                        <p class="text-sm font-bold opacity-80">Job Muse #{{ museGen.muse_job_id }}<span v-if="museGen.muse_profile_name"> · Dikerjakan oleh {{ museGen.muse_profile_name }}</span> · Suara: {{ voiceSourceShort(museGen.voice_source) }}</p>
+                        <p class="text-sm font-bold opacity-80">Job Muse #{{ museGen.muse_job_id }}<span v-if="museGen.muse_profile_name"> · Dikerjakan oleh {{ museGen.muse_profile_name }}</span> · Generate: {{ engineShort(museGen.engine) }}</p>
                         <h2 class="font-display text-2xl font-bold">{{ museGen.keyword }}</h2>
                     </div>
                     <Badge :color="GEN_STATUS[museGen.status]?.color || 'slate'" :icon="GEN_STATUS[museGen.status]?.icon">{{ GEN_STATUS[museGen.status]?.label || museGen.status }}</Badge>
@@ -300,7 +300,7 @@ function download() {
                         <div class="dot-bg absolute inset-0 opacity-20"></div>
                         <div class="relative flex flex-wrap items-center justify-between gap-4">
                             <div>
-                                <p class="text-sm font-bold text-white/80">{{ result.video_url ? 'Video dari Muse' : 'Siap tayang' }} · {{ result.durasi }} detik · {{ MODELS.find((m) => m.value === result.model)?.label }} · Suara: {{ voiceSourceShort(result.voice_source) }}</p>
+                                <p class="text-sm font-bold text-white/80">{{ result.video_url ? 'Video dari Muse' : 'Siap tayang' }} · {{ result.durasi }} detik · {{ MODELS.find((m) => m.value === result.model)?.label }} · Generate: {{ engineShort(result.engine) }}</p>
                                 <h2 class="mt-1 font-display text-3xl font-bold">{{ result.judul }}</h2>
                             </div>
                             <div class="flex flex-wrap gap-2">

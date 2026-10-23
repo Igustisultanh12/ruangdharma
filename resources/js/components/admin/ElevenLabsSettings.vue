@@ -18,9 +18,10 @@ const configured = ref(false);
 const masked = ref(null);
 const apiKey = ref('');
 const removeKey = ref(false);
-const form = ref({ voice_ibu: '', voice_anak: '', voice_narator: '', model_id: 'eleven_multilingual_v2' });
+const form = ref({ voice_ibu: '', voice_anak: '', voice_narator: '', model_id: 'eleven_multilingual_v2', video_model: 'veo-3.1-fast-generate-001' });
 const voices = ref([]);
 const MODEL_OPTIONS = ['eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5', 'eleven_v3'];
+const VIDEO_MODEL_OPTIONS = ['veo-3.1-fast-generate-001', 'veo-3.1-generate-001', 'bytedance-seedance-v2.5', 'bytedance-seedance-v2', 'bytedance-seedance-v2-fast', 'bytedance-seedance-v2-mini', 'creatify-aurora'];
 
 const voiceName = (id) => voices.value.find((v) => v.voice_id === id)?.name || null;
 
@@ -34,6 +35,7 @@ async function load() {
             voice_anak: data.data.voice_anak || '',
             voice_narator: data.data.voice_narator || '',
             model_id: data.data.model_id || 'eleven_multilingual_v2',
+            video_model: data.data.video_model || 'veo-3.1-fast-generate-001',
         };
     } catch (e) {
         toast.error(errorMessage(e));
@@ -83,8 +85,8 @@ const keyStatus = computed(() => (configured.value ? `Sudah diatur (${masked.val
     <form v-else class="card space-y-6 p-6" @submit.prevent="save">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h3 class="font-display text-lg font-bold">ElevenLabs — sumber suara video</h3>
-                <p class="text-sm text-muted">Dipakai saat pengguna memilih sumber suara <b>ElevenLabs</b> di form Buat Video. Visual tetap dibuat Muse lewat Google Flow; dialog/narasi dibuat ElevenLabs dari Voice ID di bawah.</p>
+                <h3 class="font-display text-lg font-bold">ElevenLabs — generate video + suara</h3>
+                <p class="text-sm text-muted">Dipakai saat pengguna memilih generate pakai <b>ElevenLabs</b> di form Buat Video: videonya dibuat di platform ElevenLabs (Image &amp; Video), dan dialog/narasinya memakai Voice ID di bawah lewat API key yang sama.</p>
             </div>
             <Badge :color="configured ? 'emerald' : 'amber'" :icon="configured ? 'badge-check' : 'triangle-alert'">{{ keyStatus }}</Badge>
         </div>
@@ -140,6 +142,16 @@ const keyStatus = computed(() => (configured.value ? `Sudah diatur (${masked.val
             </datalist>
             <p class="help"><code>eleven_multilingual_v2</code> mendukung Bahasa Indonesia dan paling stabil untuk narasi. <code>eleven_flash_v2_5</code> lebih cepat &amp; murah.</p>
             <p v-if="errors.model_id" class="field-error">{{ errors.model_id }}</p>
+        </div>
+
+        <div>
+            <label class="label" for="el-video-model">Model video ElevenLabs (Image &amp; Video API)</label>
+            <input id="el-video-model" v-model="form.video_model" class="input" list="el-video-models" placeholder="veo-3.1-fast-generate-001" />
+            <datalist id="el-video-models">
+                <option v-for="m in VIDEO_MODEL_OPTIONS" :key="m" :value="m"></option>
+            </datalist>
+            <p class="help">Model yang bisa dipanggil lewat API: <code>veo-3.1-fast-generate-001</code> (Veo 3.1 Fast, 9:16, audio bawaan), <code>veo-3.1-generate-001</code> (kualitas), keluarga <code>bytedance-seedance-*</code> (perlu persetujuan ByteDance di akun), dan <code>creatify-aurora</code> (lip-sync dari gambar + audio). Generate video lewat API butuh akun <b>plan Pro ke atas</b> dan API key berizin <b>Image &amp; Video / Flows</b> — akun Creator ditolak API-nya (error paid_plan_required).</p>
+            <p v-if="errors.video_model" class="field-error">{{ errors.video_model }}</p>
         </div>
 
         <div class="flex items-center justify-end gap-3 border-t border-line pt-5">
