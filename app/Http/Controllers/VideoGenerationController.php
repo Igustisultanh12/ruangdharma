@@ -158,7 +158,12 @@ class VideoGenerationController extends Controller
     {
         $g = $request->user()->videoGenerations()->where('status', 'pending_confirmation')->findOrFail($id);
         if ($g->museJob) $g->museJob->update(['status' => 'queued']);
-        $g->update(['status' => 'waiting_muse', 'caption' => 'Menunggu Muse — video sedang dibuat...']);
+        // Pertahankan caption draft bila sudah berisi naskah/caption asli dari Muse;
+        // hanya ganti ke placeholder bila caption masih placeholder/empty.
+        $captionText = $g->captionText();
+        $updates = ['status' => 'waiting_muse'];
+        if ($captionText === '' || $captionText === 'Menunggu konfirmasi admin sebelum video dibuat Muse.') $updates['caption'] = 'Menunggu Muse — video sedang dibuat...';
+        $g->update($updates);
         ActivityLogger::fromRequest($request, 'generate', "Konfirmasi job pending #{$g->muse_job_id}: {$g->keyword} ({$g->model}, {$g->durasi}s) — mulai digenerate Muse", ['generation_id' => $g->id, 'muse_job_id' => $g->muse_job_id]);
         NotificationService::notify($request->user(), 'Job dikonfirmasi', "Video \"{$g->keyword}\" mulai dibuat oleh Muse.");
         return response()->json(['success' => true, 'message' => 'Job dikonfirmasi. Muse akan langsung membuat videonya.', 'data' => $g->fresh()]);

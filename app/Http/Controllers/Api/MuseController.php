@@ -37,6 +37,13 @@ class MuseController extends Controller
             'callback_url' => 'sometimes|nullable|url',
             'async' => 'sometimes|boolean', 'via_muse' => 'sometimes|boolean', 'draft' => 'sometimes|boolean',
             'muse_profile_id' => 'sometimes|nullable|integer',
+            // Naskah draft (opsional, dari Muse): agar admin bisa membaca naskah + caption
+            // di menu Job Pending SEBELUM mengonfirmasi, bukan baru setelah video selesai.
+            'naskah' => 'sometimes|array', 'naskah.*.bagian' => 'sometimes|integer',
+            'naskah.*.speaker' => 'sometimes|string|max:50', 'naskah.*.suara' => 'sometimes|string|max:100',
+            'naskah.*.teks' => 'sometimes|string', 'naskah.*.dialog' => 'sometimes|string',
+            'naskah.*.prompt_visual' => 'sometimes|string', 'naskah.*.judul_bagian' => 'sometimes|string|max:200',
+            'caption' => 'sometimes|nullable|string', 'prompts' => 'sometimes|array', 'prompts.*' => 'string',
         ]);
         $durasi = (int) ($data['durasi'] ?? 60); $model = $data['model'] ?? 'narasi'; $engine = $data['engine'] ?? $data['voice_source'] ?? 'flow';
         $async = !empty($data['async']) || !empty($data['via_muse']);
@@ -54,9 +61,11 @@ class MuseController extends Controller
         // sampai admin mengonfirmasi lewat menu Job Pending (POST /generations/{id}/confirm-job).
         if ($async) {
             if ($user) {
-                \App\Models\VideoGeneration::create(['user_id' => $user->id, 'keyword' => $data['keyword'], 'durasi' => $durasi, 'model' => $model, 'engine' => $engine, 'naskah' => [], 'caption' => $draft ? 'Menunggu konfirmasi admin sebelum video dibuat Muse.' : 'Menunggu Muse — video sedang dibuat...', 'prompts' => [], 'status' => $draft ? 'pending_confirmation' : 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
+                $draftNaskah = array_values($data['naskah'] ?? []);
+                $draftCaption = !empty($data['caption']) ? $data['caption'] : ($draft ? 'Menunggu konfirmasi admin sebelum video dibuat Muse.' : 'Menunggu Muse — video sedang dibuat...');
+                \App\Models\VideoGeneration::create(['user_id' => $user->id, 'keyword' => $data['keyword'], 'durasi' => $durasi, 'model' => $model, 'engine' => $engine, 'naskah' => $draftNaskah, 'caption' => $draftCaption, 'prompts' => array_values($data['prompts'] ?? []), 'status' => $draft ? 'pending_confirmation' : 'waiting_muse', 'source' => 'muse', 'muse_job_id' => $job->id, 'workflow_status' => 'draft']);
             }
-            return response()->json(['success' => true, 'job_id' => $job->id, 'status' => $draft ? 'pending_confirmation' : 'queued', 'keyword' => $job->keyword, 'durasi' => $durasi, 'model' => $model, 'engine' => $engine, 'voice_source' => $engine, 'muse_profile_id' => $job->muse_profile_id, 'muse_profile_name' => $profile?->name, 'message' => $draft ? 'Job draft dibuat, menunggu konfirmasi admin di menu Job Pending sebelum digenerate.' : 'Job dibuat, menunggu Muse generate video. Muse akan kirim hasil via webhook.', 'next_step' => $draft ? 'Admin mengonfirmasi job di menu Job Pending web.' : 'Di chat Muse, jalankan: python3 ~/workspace/custom-connectors/custom.ruangdharma/bin/ruangdharma.py pending'], 201);
+            return response()->json(['success' => true, 'job_id' => $job->id, 'status' => $draft ? 'pending_confirmation' : 'queued', 'keyword' => $job->keyword, 'durasi' => $durasi, 'model' => $model, 'engine' => $engine, 'voice_source' => $engine, 'muse_profile_id' => $job->muse_profile_id, 'muse_profile_name' => $profile?->name, 'has_script' => !empty($data['naskah'] ?? []), 'message' => $draft ? 'Job draft dibuat, menunggu konfirmasi admin di menu Job Pending sebelum digenerate.' : 'Job dibuat, menunggu Muse generate video. Muse akan kirim hasil via webhook.', 'next_step' => $draft ? 'Admin mengonfirmasi job di menu Job Pending web.' : 'Di chat Muse, jalankan: python3 ~/workspace/custom-connectors/custom.ruangdharma/bin/ruangdharma.py pending'], 201);
         }
         try {
             $result = $gen->generate($data['keyword'], $durasi, $model);
@@ -66,6 +75,51 @@ class MuseController extends Controller
             $muse->failJob($job, $e->getMessage());
             return response()->json(['success' => false, 'job_id' => $job->id, 'status' => 'failed', 'message' => $e->getMessage()], 500);
         }
+    }
+    /**
+     * POST /api/muse/draft-script — Isi / perbarui naskah + caption + prompt pada
+     * draft yang SUDAH ada (status pending_confirmation) agar tampil di Job Pending.
+     * Dipakai untuk backfill draft lama yang dibuat sebelum fitur naskah-di-draft ada
+     * (mis. draft harian #13–#21), dan untuk remake naskah seperti Kajeng Kliwon #16.
+     * Auth: X-Muse-Token milik profil pemilik job (aturan yang sama seperti webhook).
+     * Hanya draft pending_confirmation yang boleh diubah; draft yang sudah dikonfirmasi
+     * / dibatalkan ditolak agar tidak menimpa video yang sedang diproduksi.
+     */
+    public function updateDraftScript(Request $request, MuseService $muse)
+    {
+        $auth = $muse->resolveTokenAuth($request->header('X-Muse-Token'), $request->bearerToken());
+        if (! $auth['authorized']) return response()->json(['success' => false, 'message' => 'Unauthorized. Header X-Muse-Token tidak valid.'], 401);
+        $data = $request->validate([
+            'job_id' => 'sometimes|nullable|integer|exists:muse_jobs,id',
+            'generation_id' => 'sometimes|nullable|integer|exists:video_generations,id',
+            'naskah' => 'sometimes|array', 'naskah.*.bagian' => 'sometimes|integer',
+            'naskah.*.speaker' => 'sometimes|string|max:50', 'naskah.*.suara' => 'sometimes|string|max:100',
+            'naskah.*.teks' => 'sometimes|string', 'naskah.*.dialog' => 'sometimes|string',
+            'naskah.*.prompt_visual' => 'sometimes|string', 'naskah.*.judul_bagian' => 'sometimes|string|max:200',
+            'caption' => 'sometimes|nullable|string', 'prompts' => 'sometimes|array', 'prompts.*' => 'string',
+        ]);
+        if (empty($data['job_id']) && empty($data['generation_id'])) {
+            return response()->json(['success' => false, 'message' => 'job_id atau generation_id wajib diisi.'], 422);
+        }
+        if (!isset($data['naskah']) && !isset($data['caption']) && !isset($data['prompts'])) {
+            return response()->json(['success' => false, 'message' => 'Isi minimal satu dari: naskah, caption, prompts.'], 422);
+        }
+        $generation = !empty($data['generation_id']) ? \App\Models\VideoGeneration::find($data['generation_id']) : null;
+        $job = !empty($data['job_id']) ? MuseJob::find($data['job_id']) : ($generation?->museJob);
+        if ($job && ! $muse->profileMatchesJob($auth['profile'], $auth['legacy'], $job)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Token tidak cocok dengan profil Muse pemilik job ini.'], 401);
+        }
+        if (! $generation) $generation = $job ? \App\Models\VideoGeneration::where('muse_job_id', $job->id)->first() : null;
+        if (! $generation) return response()->json(['success' => false, 'message' => 'Generation untuk job ini tidak ditemukan.'], 404);
+        if ($generation->status !== 'pending_confirmation') {
+            return response()->json(['success' => false, 'message' => 'Hanya draft pending_confirmation yang bisa diisi naskahnya (status saat ini: ' . $generation->status . ').'], 422);
+        }
+        $updates = [];
+        if (isset($data['naskah'])) $updates['naskah'] = array_values($data['naskah']);
+        if (isset($data['caption'])) $updates['caption'] = $data['caption'];
+        if (isset($data['prompts'])) $updates['prompts'] = array_values($data['prompts']);
+        $generation->update($updates);
+        return response()->json(['success' => true, 'message' => 'Naskah draft berhasil diperbarui dan kini tampil di Job Pending.', 'job_id' => $generation->muse_job_id, 'generation_id' => $generation->id, 'keyword' => $generation->keyword, 'has_script' => !empty($generation->fresh()->naskah)], 200);
     }
     public function pendingJobs(Request $request, MuseService $muse)
     {
