@@ -127,6 +127,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/generations/{id}/auto-backsound', [\App\Http\Controllers\BacksoundController::class, 'autoShow']);
     Route::post('/generations/{id}/auto-backsound', [\App\Http\Controllers\BacksoundController::class, 'autoRequest']);
     Route::post('/generations/{id}/auto-backsound/apply', [\App\Http\Controllers\BacksoundController::class, 'autoApply']);
+    Route::post('/generations/{id}/auto-backsound/use-version', [\App\Http\Controllers\BacksoundController::class, 'useVideoVersion']);
     Route::post('/generations/{id}/auto-backsound/reject', [\App\Http\Controllers\BacksoundController::class, 'autoReject']);
     Route::post('/generations/{id}/auto-backsound/cancel', [\App\Http\Controllers\BacksoundController::class, 'autoCancel']);
 

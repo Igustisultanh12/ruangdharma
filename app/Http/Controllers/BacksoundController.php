@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 use App\Models\Backsound;
 use App\Models\BacksoundRequest;
 use App\Models\VideoGeneration;
+use App\Services\ActivityLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -68,7 +69,84 @@ class BacksoundController extends Controller
         $payload = $latest->toArray();
         // Riwayat hasil mix ditampilkan di bawah panel Auto Backsound (Media + Editor Audio).
         $payload['history'] = $this->autoHistory($g);
+        // Daftar versi video yang bisa dipilih untuk upload (asli + tiap hasil mix).
+        $payload['versions'] = $this->videoVersions($g);
+        $payload['active_video_url'] = $g->video_url;
+        $payload['original_video_url'] = $this->originalVideoUrlFor($g);
         return response()->json(['success' => true, 'data' => $payload]);
+    }
+    /** URL video ORIGINAL (tanpa backsound): entri video_files pertama yang bukan -mix-. */
+    private function originalVideoUrlFor(VideoGeneration $g): ?string
+    {
+        foreach ((array) ($g->video_files ?? []) as $f) {
+            if (is_string($f) && $f !== '' && ! str_contains($f, '-mix-')) return $f;
+        }
+        if (is_string($g->video_url) && $g->video_url !== '' && ! str_contains($g->video_url, '-mix-')) return $g->video_url;
+        return null;
+    }
+    /** Samakan bentuk URL video (relatif /storage/... ) agar perbandingan versi tidak gagal karena URL penuh. */
+    private function normalizeVideoUrl(?string $url): ?string
+    {
+        if (! $url) return null;
+        $path = parse_url($url, PHP_URL_PATH) ?? $url;
+        $path = '/' . ltrim((string) $path, '/');
+        if (str_contains($path, '/storage/')) return '/storage/' . substr($path, strpos($path, '/storage/') + strlen('/storage/'));
+        return $path;
+    }
+    /**
+     * Daftar versi video untuk video ini, urutan: asli dulu, lalu hasil mix terbaru.
+     * Tiap versi: key, label, video_url, candidate_name, applied_volume, finished_at, is_active.
+     * is_active = versi yang dipakai video_url saat ini — dan karena publish sosmed
+     * (Medsos/YouTube) membaca video_url, versi aktif inilah yang ter-upload.
+     */
+    private function videoVersions(VideoGeneration $g): array
+    {
+        $active = $this->normalizeVideoUrl($g->video_url);
+        $versions = [];
+        $seen = [];
+        $push = function ($key, $label, $url, $candidate, $volume, $finished) use (&$versions, &$seen, $active) {
+            $norm = $this->normalizeVideoUrl($url);
+            if (! $norm || isset($seen[$norm])) return;
+            $seen[$norm] = true;
+            $versions[] = ['key' => $key, 'label' => $label, 'video_url' => $norm, 'candidate_name' => $candidate, 'applied_volume' => $volume, 'finished_at' => $finished, 'is_active' => $norm === $active];
+        };
+        $original = $this->originalVideoUrlFor($g);
+        if ($original) $push('original', 'Asli (tanpa backsound)', $original, null, null, null);
+        foreach ($this->autoHistory($g) as $h) {
+            if (!empty($h['result_video_url'])) $push('mix-' . $h['id'], $h['candidate_name'] ?: 'Mix backsound', $h['result_video_url'], $h['candidate_name'], $h['applied_volume'], $h['finished_at']);
+        }
+        // File -mix- lain di video_files (mis. mix manual dari Editor Audio) yang
+        // tidak tercatat di riwayat Auto Backsound tetap bisa dipilih.
+        foreach ((array) ($g->video_files ?? []) as $f) {
+            if (is_string($f) && str_contains($f, '-mix-')) $push('mix-file-' . md5($f), 'Mix backsound', $f, null, null, null);
+        }
+        // Bila video_url aktif tidak ada di daftar (mis. file diunggah manual),
+        // tampilkan juga agar user tahu versi mana yang sedang aktif.
+        if ($g->video_url) $push('current', 'Versi aktif saat ini', $g->video_url, null, null, null);
+        return $versions;
+    }
+    /**
+     * Pilih versi video yang dipakai untuk upload: asli atau salah satu hasil mix.
+     * Hanya mengganti video_url aktif (tanpa mix ulang, tanpa menghapus versi lain).
+     * URL wajib salah satu versi yang dikenal untuk video ini — tidak bisa sembarang URL.
+     */
+    public function useVideoVersion(Request $request, $id)
+    {
+        $data = $request->validate(['video_url' => 'required|string|max:2048']);
+        $g = $this->findOwnedGeneration($request, $id);
+        $wanted = $this->normalizeVideoUrl($data['video_url']);
+        $allowed = collect($this->videoVersions($g))->pluck('video_url')->all();
+        if (! $wanted || ! in_array($wanted, $allowed, true)) {
+            return response()->json(['success' => false, 'message' => 'Versi video ini tidak dikenali untuk video ini.'], 422);
+        }
+        // Pastikan filenya benar-benar ada di storage sebelum dijadikan versi aktif.
+        $rel = ltrim(substr($wanted, strlen('/storage/')), '/');
+        if (! Storage::disk('public')->exists($rel)) {
+            return response()->json(['success' => false, 'message' => 'File versi ini tidak ditemukan di server.'], 422);
+        }
+        $g->update(['video_url' => $wanted]);
+        ActivityLogger::fromRequest($request, 'video.version', "Versi video aktif diubah: {$g->keyword} -> {$wanted}", ['generation_id' => $g->id]);
+        return response()->json(['success' => true, 'message' => 'Versi video untuk upload berhasil diubah.', 'data' => $g->fresh(), 'versions' => $this->videoVersions($g->fresh()), 'active_video_url' => $wanted], 200);
     }
     /**
      * Riwayat mix Auto Backsound yang sudah selesai untuk video ini (terbaru di atas).

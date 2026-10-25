@@ -13,7 +13,9 @@ const emit = defineEmits(['updated']);
 
 const autoReq = ref(null);
 const history = ref([]);
+const versions = ref([]);
 const autoBusy = ref(false);
+const usingKey = ref(null);
 const volume = ref(20);
 let autoTimer = null;
 const AUTO_OPEN = ['queued', 'searching', 'rejected'];
@@ -37,8 +39,20 @@ async function loadAuto() {
     const { data } = await api.get(`/generations/${props.generationId}/auto-backsound`);
     autoReq.value = data.data || null;
     if (Array.isArray(autoReq.value?.history)) history.value = autoReq.value.history;
+    if (Array.isArray(autoReq.value?.versions)) versions.value = autoReq.value.versions;
   } catch { /* diamkan: panel auto bersifat tambahan */ }
   scheduleAutoPoll();
+}
+async function useVersion(v) {
+  if (v.is_active) return;
+  usingKey.value = v.key;
+  try {
+    const { data } = await api.post(`/generations/${props.generationId}/auto-backsound/use-version`, { video_url: v.video_url });
+    toast.success(data.message || 'Versi video untuk upload berhasil diubah.');
+    if (Array.isArray(data.versions)) versions.value = data.versions;
+    await loadAuto();
+    emit('updated');
+  } catch (err) { toast.error(errorMessage(err)); } finally { usingKey.value = null; }
 }
 function fmtDate(s) {
   if (!s) return '';
@@ -112,7 +126,23 @@ onUnmounted(() => { clearTimeout(autoTimer); });
         <button class="btn btn-ghost btn-sm" :disabled="autoBusy" @click="cancelAuto">Batalkan</button>
       </div>
     </template>
-    <div v-if="history.length" class="border-t border-slate-100 pt-3">
+    <div v-if="versions.length" class="border-t border-slate-100 pt-3">
+      <p class="text-xs font-bold text-slate-600">🎬 Versi video untuk upload</p>
+      <p class="mt-1 text-[11px] text-muted">Pilih versi yang dipakai saat upload ke Instagram, YouTube, TikTok, dan lainnya. Versi lain tetap tersimpan dan bisa dipilih lagi kapan saja — tanpa mix ulang.</p>
+      <ul class="mt-2 space-y-3">
+        <li v-for="v in versions" :key="v.key" class="rounded-lg bg-purple-50 px-3 py-2">
+          <div class="flex items-center justify-between gap-2">
+            <p class="truncate text-xs font-semibold">{{ v.label }}</p>
+            <span v-if="v.is_active" class="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">✓ Dipakai untuk upload</span>
+          </div>
+          <p class="text-[11px] text-muted"><span v-if="v.finished_at">{{ fmtDate(v.finished_at) }}</span><span v-if="v.applied_volume != null"> • volume {{ v.applied_volume }}%</span><span v-if="v.key === 'original'"> • tanpa backsound</span></p>
+          <video v-if="v.video_url" controls preload="none" :src="v.video_url" class="mt-2 w-full rounded-lg bg-black" />
+          <button v-if="!v.is_active" class="btn btn-primary btn-sm mt-2" :disabled="usingKey === v.key" @click="useVersion(v)"><Spinner v-if="usingKey === v.key" class="h-4 w-4" />Pakai versi ini</button>
+          <p v-else class="mt-1 text-[11px] text-muted">Versi aktif saat ini.</p>
+        </li>
+      </ul>
+    </div>
+    <div v-else-if="history.length" class="border-t border-slate-100 pt-3">
       <p class="text-xs font-bold text-slate-600">🎧 Riwayat mix backsound</p>
       <ul class="mt-2 space-y-2">
         <li v-for="h in history" :key="h.id" class="flex items-center justify-between gap-2 rounded-lg bg-purple-50 px-3 py-2">
